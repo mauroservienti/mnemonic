@@ -6,7 +6,7 @@ tags:
   - architecture
   - rationale
 createdAt: '2026-03-07T17:59:12.124Z'
-updatedAt: '2026-03-07T18:00:11.689Z'
+updatedAt: '2026-03-07T18:37:15.900Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
 relatedTo:
