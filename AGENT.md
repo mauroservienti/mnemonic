@@ -16,7 +16,7 @@ When implementing a new feature or behavior in mnemonic itself, dogfood the loca
 - Use the project-scoped `mnemonic` MCP server for real operations whenever the feature touches memory behavior, note formatting, retrieval, relationships, sync, or indexing.
 - Prefer exercising the feature through MCP tools (`remember`, `update`, `get`, `relate`, `recall`, etc.) instead of writing `.mnemonic/` files directly.
 - Mnemoize important implementation decisions, tradeoffs, and debugging findings through the MCP server so future agents can recall them.
-- If manual file edits are temporarily needed for recovery or cleanup, follow up by recreating or validating the final state through MCP before considering the task done.
+- **Never fall back to direct file writes when in dogfooding mode.** If the MCP tool call fails, troubleshoot the tool or use `scripts/mcp-local.sh` directly rather than bypassing the server.
 
 ## Design decisions and rationale
 
