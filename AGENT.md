@@ -171,13 +171,16 @@ We switched from HS256 to RS256 because...
 | `remember`       | Write a note + embedding; `cwd` sets project context and `scope` picks storage |
 | `set_project_memory_policy` | Save the default write scope for a project (`project`, `global`, or `ask`) |
 | `get_project_memory_policy` | Show the saved default write scope for a project                |
+| `project_memory_summary` | Summarize what mnemonic currently knows about a project          |
 | `recall`         | Semantic search with optional project boost                                    |
 | `update`         | Update note content/title/tags, always re-embeds                               |
 | `forget`         | Delete note + embedding, git commit + push; cleans up dangling relationships   |
-| `list`           | List notes filtered by project scope and/or tags                               |
+| `list`           | List notes filtered by project scope/tags, optionally with previews/relations/storage |
 | `get`            | Fetch one or more notes by exact id                                            |
 | `relate`         | Create a typed relationship between two notes (bidirectional by default)       |
 | `unrelate`       | Remove a relationship between two notes                                        |
+| `recent_memories` | Show the most recently updated notes for a scope                              |
+| `memory_graph`   | Show a compact adjacency list of note relationships                            |
 | `sync`           | Bidirectional git sync — pull, push, auto-embed pulled notes                   |
 | `reindex`        | Manually rebuild missing embeddings; `force=true` rebuilds all                 |
 

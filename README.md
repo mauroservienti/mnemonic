@@ -143,13 +143,16 @@ Git credentials (`~/.gitconfig` and `~/.ssh`) are mounted read-only so push/pull
 | `remember`       | Store a memory with project context from `cwd` and storage controlled by `scope` |
 | `set_project_memory_policy` | Set the default write scope for a project (`project`, `global`, or `ask`) |
 | `get_project_memory_policy` | Show the saved default write scope for a project                    |
+| `project_memory_summary` | Summarize what mnemonic knows about the current project                 |
 | `recall`         | Semantic search — project-boosted when `cwd` provided                           |
 | `update`         | Update content, title, or tags; `cwd` helps locate project notes                |
 | `forget`         | Delete a memory by id; cleans up dangling relationships automatically           |
-| `list`           | List memories — filter by project scope and/or tags                             |
+| `list`           | List memories — filter by project scope/tags and optionally include previews, relations, storage, and timestamps |
 | `get`            | Fetch one or more memories by exact id                                          |
 | `relate`         | Create a typed relationship between two memories (bidirectional by default)     |
 | `unrelate`       | Remove a relationship between two memories                                      |
+| `recent_memories` | Show the most recently updated memories for a scope                            |
+| `memory_graph`   | Show a compact adjacency list of memory relationships                           |
 | `sync`           | Bidirectional sync — pulls remote, pushes local commits, auto-embeds new notes  |
 | `reindex`        | Manually rebuild missing embeddings (sync does this automatically)              |
 
@@ -195,6 +198,17 @@ If the project policy is `ask`, `remember` returns a clear choice instead of gue
 
 - `scope: "project"` — shared project vault (`.mnemonic/`)
 - `scope: "global"` — private main vault with project association
+
+## Project introspection
+
+To see what mnemonic currently knows about a project without stitching together multiple calls:
+
+- `project_memory_summary` — compact overview of project memories, grouped by theme, with current write policy and recent changes
+- `recent_memories` — latest updated memories for the selected scope
+- `memory_graph` — compact relationship view for visible memories
+- `list` with `includePreview`, `includeRelations`, `includeStorage`, and `includeUpdated` for richer inspection in one call
+
+`detect_project` also includes the current per-project write policy when one exists.
 
 ## Multi-machine workflow
 

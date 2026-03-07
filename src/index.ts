@@ -18,6 +18,7 @@ import {
   type ProjectPolicyScope,
   type WriteScope,
 } from "./project-memory-policy.js";
+import { classifyTheme, summarizePreview, titleCaseTheme } from "./project-introspection.js";
 import { detectProject } from "./project.js";
 import { VaultManager, type Vault } from "./vault.js";
 
@@ -165,6 +166,91 @@ function formatSyncResult(result: SyncResult, label: string): string[] {
   return lines;
 }
 
+type SearchScope = "project" | "global" | "all";
+
+type NoteEntry = {
+  note: Note;
+  vault: Vault;
+};
+
+function storageLabel(vault: Vault): string {
+  return vault.isProject ? "project-vault" : "main-vault";
+}
+
+async function collectVisibleNotes(
+  cwd?: string,
+  scope: SearchScope = "all",
+  tags?: string[],
+): Promise<{ project: Awaited<ReturnType<typeof resolveProject>>; entries: NoteEntry[] }> {
+  const project = await resolveProject(cwd);
+  const vaults = await vaultManager.searchOrder(cwd);
+
+  let filterProject: string | null | undefined = undefined;
+  if (scope === "project" && project) filterProject = project.id;
+  else if (scope === "global") filterProject = null;
+
+  const seen = new Set<string>();
+  const entries: NoteEntry[] = [];
+
+  for (const vault of vaults) {
+    const vaultNotes = await vault.storage.listNotes(
+      filterProject !== undefined ? { project: filterProject } : undefined
+    );
+    for (const note of vaultNotes) {
+      if (seen.has(note.id)) {
+        continue;
+      }
+      if (tags && tags.length > 0) {
+        const noteTags = new Set(note.tags);
+        if (!tags.every((tag) => noteTags.has(tag))) {
+          continue;
+        }
+      }
+      seen.add(note.id);
+      entries.push({ note, vault });
+    }
+  }
+
+  entries.sort((a, b) => {
+    const aRank = project && a.note.project === project.id ? 0 : a.note.project ? 1 : 2;
+    const bRank = project && b.note.project === project.id ? 0 : b.note.project ? 1 : 2;
+    return aRank - bRank || a.note.title.localeCompare(b.note.title);
+  });
+
+  return { project, entries };
+}
+
+function formatListEntry(
+  entry: NoteEntry,
+  options: { includeRelations?: boolean; includePreview?: boolean; includeStorage?: boolean; includeUpdated?: boolean } = {}
+): string {
+  const { note, vault } = entry;
+  const proj = note.project ? `[${note.projectName ?? note.project}]` : "[global]";
+  const extras: string[] = [];
+  if (note.tags.length > 0) extras.push(note.tags.join(", "));
+  if (options.includeStorage) extras.push(`stored=${storageLabel(vault)}`);
+  if (options.includeUpdated) extras.push(`updated=${note.updatedAt}`);
+  const lines = [`- **${note.title}** \`${note.id}\` ${proj}${extras.length > 0 ? ` — ${extras.join(" | ")}` : ""}`];
+  if (options.includeRelations && note.relatedTo && note.relatedTo.length > 0) {
+    lines.push(`  related: ${note.relatedTo.map((rel) => `${rel.id} (${rel.type})`).join(", ")}`);
+  }
+  if (options.includePreview) {
+    lines.push(`  preview: ${summarizePreview(note.content)}`);
+  }
+  return lines.join("\n");
+}
+
+async function formatProjectPolicyLine(projectId?: string): Promise<string> {
+  if (!projectId) {
+    return "Policy: none";
+  }
+  const policy = await projectMemoryPolicies.get(projectId);
+  if (!policy) {
+    return "Policy: none (fallback write scope with cwd is project)";
+  }
+  return `Policy: default write scope ${policy.defaultScope} (updated ${policy.updatedAt})`;
+}
+
 // ── MCP Server ────────────────────────────────────────────────────────────────
 
 const server = new McpServer({
@@ -190,6 +276,7 @@ server.registerTool(
     if (!project) {
       return { content: [{ type: "text", text: `Could not detect a project for: ${cwd}` }] };
     }
+    const policyLine = await formatProjectPolicyLine(project.id);
     return {
       content: [{
         type: "text",
@@ -197,7 +284,8 @@ server.registerTool(
           `Project detected:\n` +
           `- **id:** \`${project.id}\`\n` +
           `- **name:** ${project.name}\n` +
-          `- **source:** ${project.source}`,
+          `- **source:** ${project.source}\n` +
+          `- **${policyLine}**`,
       }],
     };
   }
@@ -541,56 +629,167 @@ server.registerTool(
         .default("all")
         .describe("'project' = only this project, 'global' = only unscoped, 'all' = everything"),
       tags: z.array(z.string()).optional().describe("Optional tag filter"),
+      includeRelations: z.boolean().optional().default(false).describe("Include related memory ids/types"),
+      includePreview: z.boolean().optional().default(false).describe("Include a short content preview for each memory"),
+      includeStorage: z.boolean().optional().default(false).describe("Include whether the memory lives in the project vault or main vault"),
+      includeUpdated: z.boolean().optional().default(false).describe("Include the last updated timestamp for each memory"),
     }),
   },
-  async ({ cwd, scope, tags }) => {
-    const project = await resolveProject(cwd);
-    const vaults = await vaultManager.searchOrder(cwd);
+  async ({ cwd, scope, tags, includeRelations, includePreview, includeStorage, includeUpdated }) => {
+    const { project, entries } = await collectVisibleNotes(cwd, scope, tags);
 
-    let filterProject: string | null | undefined = undefined;
-    if (scope === "project" && project) filterProject = project.id;
-    else if (scope === "global") filterProject = null;
-
-    const seen = new Set<string>();
-    let notes: Note[] = [];
-
-    for (const vault of vaults) {
-      const vaultNotes = await vault.storage.listNotes(
-        filterProject !== undefined ? { project: filterProject } : undefined
-      );
-      for (const n of vaultNotes) {
-        if (!seen.has(n.id)) { seen.add(n.id); notes.push(n); }
-      }
-    }
-
-    if (tags && tags.length > 0) {
-      notes = notes.filter((n) => {
-        const s = new Set(n.tags);
-        return tags.every((t) => s.has(t));
-      });
-    }
-
-    notes.sort((a, b) => {
-      const aRank = project && a.project === project.id ? 0 : a.project ? 1 : 2;
-      const bRank = project && b.project === project.id ? 0 : b.project ? 1 : 2;
-      return aRank - bRank || a.title.localeCompare(b.title);
-    });
-
-    if (notes.length === 0) {
+    if (entries.length === 0) {
       return { content: [{ type: "text", text: "No memories found." }] };
     }
 
-    const lines = notes.map((n) => {
-      const proj = n.project ? `[${n.projectName ?? n.project}]` : "[global]";
-      const tagStr = n.tags.length > 0 ? ` — ${n.tags.join(", ")}` : "";
-      return `- **${n.title}** \`${n.id}\` ${proj}${tagStr}`;
-    });
+    const lines = entries.map((entry) => formatListEntry(entry, {
+      includeRelations,
+      includePreview,
+      includeStorage,
+      includeUpdated,
+    }));
 
     const header = project && scope !== "global"
-      ? `${notes.length} memories (project: ${project.name}, scope: ${scope}):`
-      : `${notes.length} memories (scope: ${scope}):`;
+      ? `${entries.length} memories (project: ${project.name}, scope: ${scope}):`
+      : `${entries.length} memories (scope: ${scope}):`;
 
     return { content: [{ type: "text", text: `${header}\n\n${lines.join("\n")}` }] };
+  }
+);
+
+// ── recent_memories ───────────────────────────────────────────────────────────
+server.registerTool(
+  "recent_memories",
+  {
+    title: "Recent Memories",
+    description: "Show the most recently updated memories for the current project or global vault.",
+    inputSchema: z.object({
+      cwd: projectParam,
+      scope: z.enum(["project", "global", "all"]).optional().default("all"),
+      limit: z.number().int().min(1).max(20).optional().default(5),
+      includePreview: z.boolean().optional().default(true),
+      includeStorage: z.boolean().optional().default(true),
+    }),
+  },
+  async ({ cwd, scope, limit, includePreview, includeStorage }) => {
+    const { project, entries } = await collectVisibleNotes(cwd, scope);
+    const recent = [...entries]
+      .sort((a, b) => b.note.updatedAt.localeCompare(a.note.updatedAt))
+      .slice(0, limit);
+
+    if (recent.length === 0) {
+      return { content: [{ type: "text", text: "No memories found." }] };
+    }
+
+    const header = project && scope !== "global"
+      ? `Recent memories for ${project.name}:`
+      : "Recent memories:";
+    const lines = recent.map((entry) => formatListEntry(entry, {
+      includePreview,
+      includeStorage,
+      includeUpdated: true,
+    }));
+    return { content: [{ type: "text", text: `${header}\n\n${lines.join("\n")}` }] };
+  }
+);
+
+// ── memory_graph ──────────────────────────────────────────────────────────────
+server.registerTool(
+  "memory_graph",
+  {
+    title: "Memory Graph",
+    description: "Show memory relationships for the current project or selected scope as a compact adjacency list.",
+    inputSchema: z.object({
+      cwd: projectParam,
+      scope: z.enum(["project", "global", "all"]).optional().default("all"),
+      limit: z.number().int().min(1).max(50).optional().default(25),
+    }),
+  },
+  async ({ cwd, scope, limit }) => {
+    const { project, entries } = await collectVisibleNotes(cwd, scope);
+    if (entries.length === 0) {
+      return { content: [{ type: "text", text: "No memories found." }] };
+    }
+
+    const visibleIds = new Set(entries.map((entry) => entry.note.id));
+    const lines = entries
+      .filter((entry) => (entry.note.relatedTo?.length ?? 0) > 0)
+      .slice(0, limit)
+      .map((entry) => {
+        const edges = (entry.note.relatedTo ?? [])
+          .filter((rel) => visibleIds.has(rel.id))
+          .map((rel) => `${rel.id} (${rel.type})`);
+        return edges.length > 0 ? `- ${entry.note.id} -> ${edges.join(", ")}` : null;
+      })
+      .filter(Boolean);
+
+    if (lines.length === 0) {
+      return { content: [{ type: "text", text: "No relationships found for that scope." }] };
+    }
+
+    const header = project && scope !== "global"
+      ? `Memory graph for ${project.name}:`
+      : "Memory graph:";
+    return { content: [{ type: "text", text: `${header}\n\n${lines.join("\n")}` }] };
+  }
+);
+
+// ── project_memory_summary ────────────────────────────────────────────────────
+server.registerTool(
+  "project_memory_summary",
+  {
+    title: "Project Memory Summary",
+    description: "Summarize what mnemonic currently knows about a project, including policy, themes, recent changes, and storage layout.",
+    inputSchema: z.object({
+      cwd: z.string().describe("Absolute path to the project working directory"),
+      maxPerTheme: z.number().int().min(1).max(5).optional().default(3),
+      recentLimit: z.number().int().min(1).max(10).optional().default(5),
+    }),
+  },
+  async ({ cwd, maxPerTheme, recentLimit }) => {
+    const { project, entries } = await collectVisibleNotes(cwd, "all");
+    if (!project) {
+      return { content: [{ type: "text", text: `Could not detect a project for: ${cwd}` }] };
+    }
+    if (entries.length === 0) {
+      return { content: [{ type: "text", text: `No memories found for project ${project.name}.` }] };
+    }
+
+    const policyLine = await formatProjectPolicyLine(project.id);
+    const themed = new Map<string, NoteEntry[]>();
+    for (const entry of entries) {
+      const theme = classifyTheme(entry.note);
+      const bucket = themed.get(theme) ?? [];
+      bucket.push(entry);
+      themed.set(theme, bucket);
+    }
+
+    const themeOrder = ["overview", "decisions", "tooling", "bugs", "architecture", "quality", "other"];
+    const sections: string[] = [];
+    sections.push(`Project memory summary for **${project.name}**`);
+    sections.push(`- id: \`${project.id}\``);
+    sections.push(`- ${policyLine}`);
+    sections.push(`- memories: ${entries.length}`);
+    sections.push(`- stored in project vault: ${entries.filter((entry) => entry.vault.isProject).length}`);
+    sections.push(`- stored in main vault: ${entries.filter((entry) => !entry.vault.isProject).length}`);
+
+    for (const theme of themeOrder) {
+      const bucket = themed.get(theme);
+      if (!bucket || bucket.length === 0) {
+        continue;
+      }
+      const top = bucket.slice(0, maxPerTheme);
+      sections.push(`\n${titleCaseTheme(theme)}:`);
+      sections.push(...top.map((entry) => `- ${entry.note.title} (\`${entry.note.id}\`)`));
+    }
+
+    const recent = [...entries]
+      .sort((a, b) => b.note.updatedAt.localeCompare(a.note.updatedAt))
+      .slice(0, recentLimit);
+    sections.push(`\nRecent changes:`);
+    sections.push(...recent.map((entry) => `- ${entry.note.updatedAt} — ${entry.note.title}`));
+
+    return { content: [{ type: "text", text: sections.join("\n") }] };
   }
 );
 
