@@ -322,6 +322,18 @@ If nothing comes to mind within a few seconds, skip it — don't force links.
 - When recalling, always pass `cwd` if you're in a project — the boost ensures
   project context surfaces first without losing global knowledge.
 
+## MCP output style
+
+Mnemonic intentionally keeps MCP responses text-first because the primary consumer is an LLM reading tool output in-context.
+
+Guidelines:
+- prefer compact, semantically explicit text over structured payloads
+- always distinguish `project` from `stored` when both matter
+- reuse stable labels like `project:`, `stored:`, `policy:`, and `updated:`
+- answer first, details second
+- keep summaries grouped and shallow rather than returning large raw dumps
+- add non-text structure only when real LLM failure cases show text is not enough
+
 ### Memory quality
 - Titles should be searchable: "JWT RS256 migration rationale" not "auth stuff"
 - Content should be self-contained: written as if you'll have no other context

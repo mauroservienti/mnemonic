@@ -69,6 +69,23 @@ The main vault's own git repo is excluded from project-vault detection (`isMainR
 ### Bidirectional sync with auto-embedding
 `sync` does: fetch → record local HEAD → pull (rebase) → diff `notes/` to find what changed → push → embed any notes that arrived. This is a single tool call that handles the full sync cycle. Rebase is used instead of merge to keep history linear. `sync` always syncs the main vault; pass `cwd` to also sync the project vault.
 
+### MCP output style
+This MCP is optimized for direct LLM consumption, so tool outputs should stay text-first.
+
+Output rules:
+- Prefer compact, semantically explicit text over structured payloads.
+- Always name both **project association** and **storage location** when both matter.
+- Use stable labels such as `project:`, `stored:`, `policy:`, `updated:` so LLMs can scan reliably.
+- Put the answer first, then supporting detail.
+- Keep lists shallow and grouped by purpose; avoid dumping raw note bodies unless the tool is explicitly for retrieval.
+- Only add structured/non-text responses if repeated LLM failures show that text is insufficient for a specific tool.
+
+Formatting rules:
+- Use short headings or lead lines for orientation tools.
+- Use bullets for enumerations and state summaries.
+- Keep wording consistent across tools for `project`, `scope`, `stored`, and `policy`.
+- For distinction-heavy outputs, prefer explicit phrases like `project: mnemonic` and `stored: main-vault` instead of implying one from the other.
+
 ## Architecture
 
 ```
