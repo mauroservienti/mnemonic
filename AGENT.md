@@ -37,6 +37,73 @@ JSON
 
 **Verify the result:** Always confirm notes were created by running `recent_memories` or `list` after `remember`. Truncated responses don't mean failure.
 
+## Git commit message protocol
+
+All MCP tools that modify memory state must follow a standardized git commit format to ensure consistency and traceability.
+
+### Commit message format
+
+```
+tool(action): Brief description (50 chars max recommended)
+
+- Note: <id> (<title>)
+- Notes: <count> notes affected
+  - <id-1>
+  - <id-2>
+- Project: <project-name>
+- Scope: project|global
+- Tags: <tag1>, <tag2>
+- Relationship: <from-id> <type> <to-id>
+- Mode: <mode>
+- Description: <additional context>
+```
+
+### Standard body fields
+
+| Field | When to use | Example |
+|-------|-------------|---------|
+| `Note` | Single note operation | `- Note: abc-123 (My Note Title)` |
+| `Notes` | Multiple notes affected | `- Notes: 3 notes affected` |
+| `Project` | Project-scoped operation | `- Project: mnemonic` |
+| `Scope` | Storage location | `- Scope: project` |
+| `Tags` | When relevant | `- Tags: design, architecture` |
+| `Relationship` | Relate/unrelate operations | `- Relationship: abc-123 explains def-456` |
+| `Mode` | Consolidation mode | `- Mode: supersedes` |
+| `Description` | Additional context | `- Description: Moved from main-vault to project-vault` |
+
+### Implementation
+
+Use `formatCommitBody()` helper in `src/index.ts`:
+
+```typescript
+const commitBody = formatCommitBody({
+  noteId: id,
+  noteTitle: title,
+  projectName: project?.name,
+  scope: writeScope,
+  tags: tags,
+  description: "Optional additional context",
+});
+
+await vault.git.commit(`remember: ${title}`, [files], commitBody);
+```
+
+### Tool-specific conventions
+
+| Tool | Subject format | Required body fields |
+|------|----------------|---------------------|
+| `remember` | `remember: <title>` | Note, Project, Scope, Tags |
+| `update` | `update: <title>` | Note, Project, Tags |
+| `forget` | `forget: <title>` | Note, Project, Description (with cleanup count) |
+| `move` | `move: <title>` | Note, Project, Description (source→target vault) |
+| `relate` | `relate: <title1> ↔ <title2>` | Note, Project, Relationship |
+| `unrelate` | `unrelate: <id1> ↔ <id2>` | Note, Project |
+| `consolidate` | `consolidate(<mode>): <title>` | Note(s), Project, Mode, Description (with source count) |
+| `prune` | `prune: removed N superseded note(s)` | Note(s), Description (with pruned list) |
+| `policy` | `policy: <project> default scope <scope>` | Project, Description (with mode if set) |
+
+**All new tools must follow this protocol.** Review existing implementations as templates.
+
 ## Design decisions and rationale
 
 ### Markdown + YAML frontmatter as storage
