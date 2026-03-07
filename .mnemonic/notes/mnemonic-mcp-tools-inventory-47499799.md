@@ -5,7 +5,7 @@ tags:
   - mcp
   - api
 createdAt: '2026-03-07T17:59:25.498Z'
-updatedAt: '2026-03-07T19:45:54.234Z'
+updatedAt: '2026-03-07T20:04:19.612Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
 relatedTo:
@@ -33,6 +33,8 @@ Tools registered in `src/index.ts`:
 | `recent_memories` | Show the most recently updated memories for a scope and storage location |
 | `memory_graph` | Show a compact adjacency list of note relationships |
 | `sync` | fetch -> pull (rebase) -> push -> auto-embed pulled notes |
-| `reindex` | Rebuild missing embeddings; `force=true` rebuilds all |
+| `reindex` | Rebuild missing embeddings; uses bounded parallel embedding from `config.json` and `force=true` rebuilds all |
 
 Relationship types: `related-to`, `explains`, `example-of`, `supersedes`.
+
+Main-vault operational config lives in `config.json`, including `reindexEmbedConcurrency` and per-project memory policies.
