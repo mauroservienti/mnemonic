@@ -1,0 +1,159 @@
+# mnemonic — Agent Context
+
+## What this project is
+
+A personal MCP memory server. The goal is to give LLMs persistent, cross-session memory that syncs across machines without running a permanent service or database.
+
+The core idea: store everything as plain markdown files in a git repo, compute embeddings locally via Ollama, and expose it all through an MCP server. No Postgres, no Docker services that need to stay running — just files, git, and a Node process that the MCP client spawns on demand.
+
+Inspired by [petabridge/memorizer](https://github.com/petabridge/memorizer) but without the Postgres/pgvector dependency.
+
+## Design decisions and rationale
+
+### Markdown + YAML frontmatter as storage
+Notes are plain `.md` files with YAML frontmatter. This was chosen deliberately:
+- Human-readable and editable outside the tool
+- Git-diffable — merge conflicts are resolvable by a human
+- One file per note means conflicts are isolated to the specific note that was edited simultaneously on two machines
+- No lock-in — the vault is just a folder of text files
+
+### Embeddings are local-only (gitignored)
+Embeddings are stored as individual JSON files in `embeddings/` but this folder is gitignored. Rationale:
+- Embeddings are derived/generated data — they can always be recomputed from the notes
+- Committing them would introduce binary-ish merge conflicts that can't be resolved meaningfully (you can't merge two float arrays)
+- At personal scale (hundreds to low thousands of notes), reindexing on a new machine is fast enough
+- The `sync` tool handles this automatically: after pulling it embeds any notes that arrived without embeddings
+
+Alternative considered: commit embeddings and use `merge=ours` strategy in `.gitattributes` to always take the local version on conflict. Valid approach if reindex time becomes painful at large scale.
+
+### Project scoping via git remote URL
+Project identity is derived by running `git remote get-url origin` from the provided `cwd`, then normalizing the URL to a stable slug:
+- `git@github.com:acme/myapp.git` → `github-com-acme-myapp`
+- `https://github.com/acme/myapp` → `github-com-acme-myapp`
+
+This ensures the same project is recognized across machines regardless of local clone path. Fallback chain: git remote → git root folder name → directory name.
+
+### Project-boosted recall, not hard filtering
+When `recall` is called with a `cwd`, project-specific notes get a **+0.15 cosine similarity boost** rather than being the only results returned. This means:
+- Project context surfaces first
+- Global memories (user preferences, cross-project knowledge) are still accessible
+- The LLM gets a richer, more complete context window
+
+### Bidirectional sync with auto-embedding
+`sync` does: fetch → record local HEAD → pull (rebase) → diff `notes/` to find what changed → push → embed any notes that arrived. This is a single tool call that handles the full sync cycle. Rebase is used instead of merge to keep history linear.
+
+## Architecture
+
+```
+src/
+  index.ts      — MCP server, all tool registrations
+  storage.ts    — read/write notes (markdown) and embeddings (JSON)
+  embeddings.ts — Ollama HTTP client, cosine similarity
+  git.ts        — git operations via simple-git, SyncResult type
+  project.ts    — detect project from cwd via git remote URL
+```
+
+### Key types
+
+```typescript
+// A stored memory
+interface Note {
+  id: string;           // slug-uuid e.g. "auth-bug-fix-a1b2c3d4"
+  title: string;
+  content: string;      // markdown body
+  tags: string[];
+  project?: string;     // stable project id e.g. "github-com-acme-myapp"
+  projectName?: string; // human-readable e.g. "myapp"
+  createdAt: string;    // ISO 8601
+  updatedAt: string;
+}
+
+// Local embedding cache
+interface EmbeddingRecord {
+  id: string;
+  model: string;        // e.g. "nomic-embed-text"
+  embedding: number[];  // 768-dimensional for nomic-embed-text
+  updatedAt: string;
+}
+
+// Returned by git.sync()
+interface SyncResult {
+  hasRemote: boolean;
+  pulledNoteIds: string[];   // notes that arrived/changed during pull
+  deletedNoteIds: string[];  // notes deleted on remote
+  pushedCommits: number;
+}
+```
+
+### Vault layout
+
+```
+~/mnemonic-vault/
+  .gitignore          ← auto-written on startup, contains "embeddings/"
+  notes/
+    <id>.md           ← one file per memory
+  embeddings/
+    <id>.json         ← local only, never committed
+```
+
+### Note format
+
+```markdown
+---
+title: JWT RS256 migration rationale
+tags: [auth, jwt, architecture]
+project: github-com-acme-myapp
+projectName: myapp
+createdAt: 2026-03-07T10:00:00.000Z
+updatedAt: 2026-03-07T10:00:00.000Z
+---
+
+We switched from HS256 to RS256 because...
+```
+
+## Tools
+
+| Tool             | Description                                                                    |
+|------------------|--------------------------------------------------------------------------------|
+| `detect_project` | Resolve a `cwd` to a stable project id via git remote URL                     |
+| `remember`       | Write a note + embedding, git commit + push                                    |
+| `recall`         | Semantic search with optional project boost                                    |
+| `update`         | Update note content/title/tags, always re-embeds                               |
+| `forget`         | Delete note + embedding, git commit + push                                     |
+| `list`           | List notes filtered by project scope and/or tags                               |
+| `sync`           | Bidirectional git sync — pull, push, auto-embed pulled notes                   |
+| `reindex`        | Manually rebuild missing embeddings; `force=true` rebuilds all                 |
+
+## Environment variables
+
+| Variable      | Default                  | Description                    |
+|---------------|--------------------------|--------------------------------|
+| `VAULT_PATH`  | `~/mnemonic-vault`       | Vault location                 |
+| `OLLAMA_URL`  | `http://localhost:11434` | Ollama server                  |
+| `EMBED_MODEL` | `nomic-embed-text`       | Embedding model                |
+| `DISABLE_GIT` | `false`                  | Skip all git ops if `"true"`   |
+
+## Stack
+
+- **TypeScript** (Node16 module resolution, ES2022 target)
+- **@modelcontextprotocol/sdk** — MCP server, stdio transport
+- **simple-git** — git operations
+- **gray-matter** — markdown frontmatter parsing
+- **zod** — MCP tool input schema validation
+- **Ollama** (external, HTTP) — local embeddings via `nomic-embed-text`
+
+## Things not to change without good reason
+
+- **One file per note** — critical for git conflict isolation. Don't aggregate notes into a single file.
+- **Embeddings gitignored** — deliberate. Don't start committing them unless reindex time becomes a real problem and you've added `.gitattributes merge=ours`.
+- **Rebase on pull** — `git pull --rebase` keeps history linear. Don't switch to merge without understanding the tradeoff on a personal vault.
+- **Project id from git remote, not local path** — the normalization in `project.ts` is what makes cross-machine consistency work. Local paths differ; remote URLs don't.
+- **Similarity boost, not hard filter** — `recall` boosts project notes rather than excluding global ones. This is intentional: global memories (preferences, patterns) should remain accessible in project context.
+
+## Known limitations and future work
+
+- **Sequential embedding on reindex** — `embedMissingNotes()` embeds one note at a time. For large vaults this could be parallelized with a concurrency limit.
+- **No full-text fallback** — if Ollama is down, `recall` fails entirely. A fallback to simple keyword search over note content would improve resilience.
+- **No relationship graph** — memorizer supports linking memories together. Not implemented here; could be added via a `relatedTo` frontmatter field.
+- **Embedding model mismatch** — if you change `EMBED_MODEL`, existing embeddings are stale. `reindex --force` fixes this but there's no automatic detection. Could check `EmbeddingRecord.model` against current model and re-embed mismatches.
+- **No web UI** — memorizer has one. Out of scope for this project; the vault is just files so any markdown editor works for browsing.
