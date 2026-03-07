@@ -6,7 +6,7 @@ tags:
   - architecture
   - rationale
 createdAt: '2026-03-07T17:59:12.124Z'
-updatedAt: '2026-03-07T23:16:36.388Z'
+updatedAt: '2026-03-07T23:34:22.406Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
 relatedTo:
@@ -19,6 +19,8 @@ relatedTo:
   - id: dynamic-project-context-loading-plan-9f2ed29c
     type: related-to
   - id: mnemonic-consolidate-tool-design-b9cbac6a
+    type: related-to
+  - id: mnemonic-git-commit-protocol-standardization-f2ee3d5e
     type: related-to
 ---
 **One file per note:** Critical for git conflict isolation. Never aggregate notes into a single file.

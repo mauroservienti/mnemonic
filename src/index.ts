@@ -119,6 +119,70 @@ function formatNote(note: Note, score?: number): string {
   );
 }
 
+// ── Git commit message helpers ────────────────────────────────────────────────
+
+interface CommitBodyOptions {
+  noteId?: string;
+  noteTitle?: string;
+  noteIds?: string[];
+  projectName?: string;
+  projectId?: string;
+  scope?: "project" | "global";
+  tags?: string[];
+  relationship?: { fromId: string; toId: string; type: string };
+  mode?: string;
+  count?: number;
+  description?: string;
+}
+
+function formatCommitBody(options: CommitBodyOptions): string {
+  const lines: string[] = [];
+
+  if (options.noteId && options.noteTitle) {
+    lines.push(`- Note: ${options.noteId} (${options.noteTitle})`);
+  }
+
+  if (options.noteIds && options.noteIds.length > 0) {
+    if (options.noteIds.length === 1 && !options.noteId) {
+      lines.push(`- Note: ${options.noteIds[0]}`);
+    } else if (options.noteIds.length > 1) {
+      lines.push(`- Notes: ${options.noteIds.length} notes affected`);
+      options.noteIds.forEach((id) => lines.push(`  - ${id}`));
+    }
+  }
+
+  if (options.count && !options.noteIds) {
+    lines.push(`- Count: ${options.count} items`);
+  }
+
+  if (options.projectName) {
+    lines.push(`- Project: ${options.projectName}`);
+  }
+
+  if (options.scope) {
+    lines.push(`- Scope: ${options.scope}`);
+  }
+
+  if (options.tags && options.tags.length > 0) {
+    lines.push(`- Tags: ${options.tags.join(", ")}`);
+  }
+
+  if (options.relationship) {
+    lines.push(`- Relationship: ${options.relationship.fromId} ${options.relationship.type} ${options.relationship.toId}`);
+  }
+
+  if (options.mode) {
+    lines.push(`- Mode: ${options.mode}`);
+  }
+
+  if (options.description) {
+    lines.push("");
+    lines.push(options.description);
+  }
+
+  return lines.join("\n");
+}
+
 function formatAskForWriteScope(project: Awaited<ReturnType<typeof resolveProject>>): string {
   const projectLabel = project ? `${project.name} (${project.id})` : "this context";
   return [
@@ -300,8 +364,21 @@ async function moveNoteBetweenVaults(
 
   await sourceVault.storage.deleteNote(note.id);
 
-  await targetVault.git.commit(`move: ${note.title}`, [vaultManager.noteRelPath(targetVault, note.id)]);
-  await sourceVault.git.commit(`move: ${note.title}`, [vaultManager.noteRelPath(sourceVault, note.id)]);
+  const targetCommitBody = formatCommitBody({
+    noteId: note.id,
+    noteTitle: note.title,
+    projectName: note.projectName,
+    description: `Moved from ${sourceVault.isProject ? "project-vault" : "main-vault"} to ${targetVault.isProject ? "project-vault" : "main-vault"}`,
+  });
+  await targetVault.git.commit(`move: ${note.title}`, [vaultManager.noteRelPath(targetVault, note.id)], targetCommitBody);
+
+  const sourceCommitBody = formatCommitBody({
+    noteId: note.id,
+    noteTitle: note.title,
+    projectName: note.projectName,
+    description: `Moved to ${targetVault.isProject ? "project-vault" : "main-vault"}`,
+  });
+  await sourceVault.git.commit(`move: ${note.title}`, [vaultManager.noteRelPath(sourceVault, note.id)], sourceCommitBody);
   await targetVault.git.push();
   if (sourceVault !== targetVault) {
     await sourceVault.git.push();
@@ -399,9 +476,17 @@ server.registerTool(
     }
 
     const projectScope = describeProject(project);
+    const commitBody = formatCommitBody({
+      noteId: id,
+      noteTitle: title,
+      projectName: project?.name,
+      scope: writeScope,
+      tags: tags,
+    });
     await vault.git.commit(
-      `remember(${projectScope}, store=${writeScope}): ${title}`,
-      [vaultManager.noteRelPath(vault, id)]
+      `remember: ${title}`,
+      [vaultManager.noteRelPath(vault, id)],
+      commitBody
     );
     await vault.git.push();
 
@@ -445,9 +530,14 @@ server.registerTool(
     await configStore.setProjectPolicy(policy);
 
     const modeStr = consolidationMode ? `, consolidationMode=${consolidationMode}` : "";
+    const commitBody = formatCommitBody({
+      projectName: project.name,
+      description: `Default scope: ${defaultScope}${modeStr ? `\nConsolidation mode: ${consolidationMode}` : ""}`,
+    });
     await vaultManager.main.git.commit(
-      `policy(${project.id}): default memory scope ${defaultScope}${modeStr}`,
-      ["config.json"]
+      `policy: ${project.name} default scope ${defaultScope}`,
+      ["config.json"],
+      commitBody
     );
     await vaultManager.main.git.push();
 
@@ -622,7 +712,13 @@ server.registerTool(
       console.error(`[embedding] Re-embed failed for '${id}': ${err}`);
     }
 
-    await vault.git.commit(`update: ${updated.title}`, [vaultManager.noteRelPath(vault, id)]);
+    const commitBody = formatCommitBody({
+      noteId: id,
+      noteTitle: updated.title,
+      projectName: updated.projectName,
+      tags: updated.tags,
+    });
+    await vault.git.commit(`update: ${updated.title}`, [vaultManager.noteRelPath(vault, id)], commitBody);
     await vault.git.push();
 
     return { content: [{ type: "text", text: `Updated memory '${id}'` }] };
@@ -669,7 +765,16 @@ server.registerTool(
     }
 
     for (const [v, files] of vaultChanges) {
-      await v.git.commit(`forget: ${note.title}`, files);
+      const isPrimaryVault = v === noteVault;
+      const commitBody = isPrimaryVault
+        ? formatCommitBody({
+            noteId: id,
+            noteTitle: note.title,
+            projectName: note.projectName,
+            description: isPrimaryVault ? `Deleted note and cleaned up ${files.length - 1} reference(s)` : undefined,
+          })
+        : undefined;
+      await v.git.commit(`forget: ${note.title}`, files, commitBody);
       await v.git.push();
     }
 
@@ -1140,7 +1245,20 @@ server.registerTool(
     }
 
     for (const [vault, files] of vaultChanges) {
-      await vault.git.commit(`relate(${type}): ${fromNote.title} ↔ ${toNote.title}`, files);
+      const isFromVault = vault === fromVault;
+      const thisNote = isFromVault ? fromNote : toNote;
+      const otherNote = isFromVault ? toNote : fromNote;
+      const commitBody = formatCommitBody({
+        noteId: thisNote.id,
+        noteTitle: thisNote.title,
+        projectName: thisNote.projectName,
+        relationship: {
+          fromId: thisNote.id,
+          toId: otherNote.id,
+          type,
+        },
+      });
+      await vault.git.commit(`relate: ${fromNote.title} ↔ ${toNote.title}`, files, commitBody);
       await vault.git.push();
     }
 
@@ -1200,7 +1318,15 @@ server.registerTool(
     }
 
     for (const [vault, files] of vaultChanges) {
-      await vault.git.commit(`unrelate: ${fromId} ↔ ${toId}`, files);
+      const found = foundFrom?.vault === vault ? foundFrom : foundTo;
+      const commitBody = found
+        ? formatCommitBody({
+            noteId: found.note.id,
+            noteTitle: found.note.title,
+            projectName: found.note.projectName,
+          })
+        : undefined;
+      await vault.git.commit(`unrelate: ${fromId} ↔ ${toId}`, files, commitBody);
       await vault.git.push();
     }
 
@@ -1620,8 +1746,22 @@ async function executeMerge(
 
   // Commit changes per vault
   for (const [vault, files] of vaultChanges) {
+    const isTargetVault = vault === targetVault;
     const action = consolidationMode === "delete" ? "consolidate(delete)" : "consolidate(supersedes)";
-    await vault.git.commit(`${action}: ${targetTitle}`, files);
+    const commitBody = isTargetVault
+      ? formatCommitBody({
+          noteId: targetId,
+          noteTitle: targetTitle,
+          projectName: project?.name,
+          mode: consolidationMode,
+          noteIds: sourceIds,
+          description: `Consolidated ${sourceIds.length} notes into new note\nSources: ${sourceIds.join(", ")}`,
+        })
+      : formatCommitBody({
+          noteIds: files.map((f) => f.replace(/\.mnemonic\/notes\/(.+)\.md$/, "$1").replace(/notes\/(.+)\.md$/, "$1")),
+          description: consolidationMode === "delete" ? "Deleted as part of consolidation" : "Marked as superseded by consolidation",
+        });
+    await vault.git.commit(`${action}: ${targetTitle}`, files, commitBody);
     await vault.git.push();
   }
 
@@ -1693,7 +1833,12 @@ async function pruneSuperseded(
 
   // Commit changes per vault
   for (const [vault, files] of vaultChanges) {
-    await vault.git.commit(`prune: removed ${files.length} superseded note(s)`, files);
+    const prunedIds = files.map((f) => f.replace(/\.mnemonic\/notes\/(.+)\.md$/, "$1").replace(/notes\/(.+)\.md$/, "$1"));
+    const commitBody = formatCommitBody({
+      noteIds: prunedIds,
+      description: `Pruned ${prunedIds.length} superseded note(s)\nNotes: ${prunedIds.join(", ")}`,
+    });
+    await vault.git.commit(`prune: removed ${files.length} superseded note(s)`, files, commitBody);
     await vault.git.push();
   }
 

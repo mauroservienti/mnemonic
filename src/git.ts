@@ -42,8 +42,22 @@ export class GitOps {
    * Commit files to the git repo. Files should be paths relative to gitRoot.
    * Callers are responsible for building the correct paths (including any
    * .mnemonic/ prefix for project vaults).
+   *
+   * Message format protocol:
+   * - First line: tool(action): Brief description (50 chars max recommended)
+   * - Body (optional): Additional details with standardized fields
+   *
+   * Standard body fields:
+   * - Note: <id> (<title>)
+   * - Notes: <count> notes affected
+   * - Project: <project-name>
+   * - Scope: project|global
+   * - Tags: <tag1>, <tag2>
+   * - Relationship: <from-id> <type> <to-id>
+   * - Mode: <mode> (for consolidation)
+   * - Files: <file1>, <file2>
    */
-  async commit(message: string, files: string[]): Promise<void> {
+  async commit(message: string, files: string[], body?: string): Promise<void> {
     if (!this.enabled) return;
     try {
       if (files.length > 0) {
@@ -53,8 +67,13 @@ export class GitOps {
       }
       const status = await this.git.status();
       if (status.staged.length === 0) return;
-      await this.git.commit(message);
-      console.error(`[git] Committed: ${message}`);
+
+      // Build commit message with optional body
+      const fullMessage = body ? `${message}\n\n${body}` : message;
+      await this.git.commit(fullMessage);
+
+      const displayMessage = body ? `${message} [...]` : message;
+      console.error(`[git] Committed: ${displayMessage}`);
     } catch (err) {
       console.error(`[git] Commit failed: ${err}`);
     }

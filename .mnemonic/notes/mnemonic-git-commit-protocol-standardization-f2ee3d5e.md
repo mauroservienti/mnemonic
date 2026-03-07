@@ -7,9 +7,12 @@ tags:
   - mcp-tools
   - documentation
 createdAt: '2026-03-07T23:34:04.303Z'
-updatedAt: '2026-03-07T23:34:04.303Z'
+updatedAt: '2026-03-07T23:34:22.406Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
+relatedTo:
+  - id: mnemonic-key-design-decisions-3f2a6273
+    type: related-to
 ---
 Implemented standardized git commit message format across all MCP tools for consistency and traceability.
 
