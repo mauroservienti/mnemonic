@@ -20,6 +20,15 @@ A local MCP memory server backed by plain markdown + JSON files, synced via git.
 - ⚙️ Generated embeddings are separate from source memories, so the repo only tracks the human-meaningful content.
 - 🧩 The storage model is boring on purpose: one note per file, easy scripting, easy backup, easy migration.
 
+## Important caveat
+
+This is optimized for simplicity, portability, and personal or small-team memory - not for huge-scale knowledge bases.
+
+- ✅ Great fit for hundreds to low thousands of memories.
+- 👍 Often still reasonable for several thousand, depending on note size, machine speed, and embedding throughput.
+- ⚠️ Once you get into very large collections, the likely pain points are reindex time, recall latency, git repo churn, and general filesystem ergonomics.
+- 🏗️ If you need massive scale or many concurrent writers, you probably want a different architecture with a dedicated database and indexing layer.
+
 ## Repository layout
 
 ```text
