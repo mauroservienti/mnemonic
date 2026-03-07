@@ -2,6 +2,24 @@
 
 A local MCP memory server backed by plain markdown + JSON files, synced via git. No database. Project-scoped memory with semantic search.
 
+## Why you might care
+
+- 🧠 Your MCP client remembers decisions, fixes, and context across sessions instead of making you re-explain the same project over and over.
+- 📁 Memories stay as plain markdown files in git, so they are easy to inspect, diff, back up, and move between machines.
+- 🚫 No heavy database to run or babysit: it works with files, git, and a local Node process.
+- 🎯 Project-scoped recall brings the right repo context to the top while still keeping useful global memories available.
+- 🤝 Shared `.mnemonic/` notes let project knowledge travel with the repository instead of staying trapped in one person's chat history.
+- 🔒 Embeddings stay local and disposable, so you keep the useful semantic search without committing generated vector data.
+- ✨ It even stores linted markdown, because apparently your long-term memory should have better formatting discipline than most meeting notes.
+
+## For the technical reader
+
+- 📝 If you like markdown-first tools, this keeps memory as normal files with YAML frontmatter instead of hiding it in a database.
+- 🪶 There is no Postgres or always-on service in the middle, which keeps setup light and makes the whole system easier to reason about.
+- 🌿 Git stays part of the workflow: notes diff cleanly, merge conflicts stay local to one memory, and history remains inspectable.
+- ⚙️ Generated embeddings are separate from source memories, so the repo only tracks the human-meaningful content.
+- 🧩 The storage model is boring on purpose: one note per file, easy scripting, easy backup, easy migration.
+
 ## Repository layout
 
 ```text
