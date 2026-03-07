@@ -6,12 +6,14 @@ tags:
   - mcp-tool
   - architecture
 createdAt: '2026-03-07T23:15:43.251Z'
-updatedAt: '2026-03-07T23:16:36.388Z'
+updatedAt: '2026-03-07T23:23:21.142Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
 relatedTo:
   - id: mnemonic-key-design-decisions-3f2a6273
     type: related-to
+  - id: mnemonic-mcp-tools-inventory-47499799
+    type: explains
 ---
 New MCP tool `consolidate` for memory consolidation with cross-vault support.
 

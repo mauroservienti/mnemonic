@@ -5,12 +5,14 @@ tags:
   - mcp
   - api
 createdAt: '2026-03-07T17:59:25.498Z'
-updatedAt: '2026-03-07T23:22:58.358Z'
+updatedAt: '2026-03-07T23:23:21.142Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
 relatedTo:
   - id: mnemonic-relationship-graph-implementation-386be386
     type: related-to
+  - id: mnemonic-consolidate-tool-design-b9cbac6a
+    type: explains
 ---
 Tools registered in `src/index.ts`:
 
