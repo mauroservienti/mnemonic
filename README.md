@@ -36,7 +36,11 @@ There are two kinds of vault:
       auth-bug-fix-d4e5f6.json
 ```
 
-When you call `remember` with a `cwd`, the note goes into the project vault (`.mnemonic/` inside the project repo). Collaborators who clone the project get the vault automatically. Without `cwd`, the note goes into the main vault.
+When you call `remember`, `cwd` determines project context and `scope` determines storage:
+
+- `cwd` + `scope: "project"` *(default when `cwd` is present)* -> store in the project vault (`.mnemonic/`)
+- `cwd` + `scope: "global"` -> store in the main vault while keeping the project association in frontmatter
+- no `cwd` -> store in the main vault as a normal global memory
 
 Notes are plain markdown with YAML frontmatter — readable, diffable, mergeable.
 Memory content is markdown-linted on `remember`/`update`: fixable issues are auto-corrected before save, and non-fixable issues are rejected.
@@ -134,9 +138,9 @@ Git credentials (`~/.gitconfig` and `~/.ssh`) are mounted read-only so push/pull
 | Tool             | Description                                                                     |
 |------------------|---------------------------------------------------------------------------------|
 | `detect_project` | Identify the project for a given `cwd` (git remote → slug)                     |
-| `remember`       | Store a memory — optionally scoped to a project via `cwd`                       |
+| `remember`       | Store a memory with project context from `cwd` and storage controlled by `scope` |
 | `recall`         | Semantic search — project-boosted when `cwd` provided                           |
-| `update`         | Update content, title, or tags; optionally re-scope to a project                |
+| `update`         | Update content, title, or tags; `cwd` helps locate project notes                |
 | `forget`         | Delete a memory by id; cleans up dangling relationships automatically           |
 | `list`           | List memories — filter by project scope and/or tags                             |
 | `get`            | Fetch one or more memories by exact id                                          |
@@ -170,11 +174,16 @@ Relationship types:
 
 ## Recall scopes
 
-All tools that accept a `cwd` also accept a `scope` parameter:
+`recall` accepts a search `scope` parameter:
 
 - `"all"` *(default)* — project memories boosted, then global
 - `"project"` — only memories for the detected project
 - `"global"` — only memories with no project association
+
+`remember` also accepts a write `scope` parameter, but there it means storage location:
+
+- `"project"` — store in the shared project vault
+- `"global"` — store in the private main vault
 
 ## Multi-machine workflow
 

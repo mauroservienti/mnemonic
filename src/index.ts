@@ -21,6 +21,7 @@ const VAULT_PATH = process.env["VAULT_PATH"]
 
 const DEFAULT_RECALL_LIMIT = 5;
 const DEFAULT_MIN_SIMILARITY = 0.3;
+const WRITE_SCOPES = ["project", "global"] as const;
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -55,6 +56,20 @@ const projectParam = z
 async function resolveProject(cwd?: string) {
   if (!cwd) return undefined;
   return detectProject(cwd);
+}
+
+async function resolveWriteVault(cwd: string | undefined, scope: "project" | "global"): Promise<Vault> {
+  if (scope === "project") {
+    return cwd
+      ? (await vaultManager.getOrCreateProjectVault(cwd)) ?? vaultManager.main
+      : vaultManager.main;
+  }
+
+  return vaultManager.main;
+}
+
+function describeProject(project: Awaited<ReturnType<typeof resolveProject>>): string {
+  return project ? `project '${project.name}' (${project.id})` : "global";
 }
 
 function formatNote(note: Note, score?: number): string {
@@ -174,16 +189,17 @@ server.registerTool(
       content: z.string().describe("The content to remember (markdown supported)"),
       tags: z.array(z.string()).optional().default([]).describe("Optional tags"),
       cwd: projectParam,
+      scope: z
+        .enum(WRITE_SCOPES)
+        .optional()
+        .describe("Where to store the memory: project vault or private global vault"),
     }),
   },
-  async ({ title, content, tags, cwd }) => {
+  async ({ title, content, tags, cwd, scope }) => {
     const project = await resolveProject(cwd);
     const cleanedContent = await cleanMarkdown(content);
-
-    // Route to project vault when cwd is given, fall back to main vault
-    const vault = cwd
-      ? (await vaultManager.getOrCreateProjectVault(cwd)) ?? vaultManager.main
-      : vaultManager.main;
+    const writeScope = scope ?? (cwd ? "project" : "global");
+    const vault = await resolveWriteVault(cwd, writeScope);
 
     const id = makeId(title);
     const now = new Date().toISOString();
@@ -205,16 +221,16 @@ server.registerTool(
       console.error(`[embedding] Skipped for '${id}': ${err}`);
     }
 
-    const scope = project ? `project '${project.name}' (${project.id})` : "global";
+    const projectScope = describeProject(project);
     await vault.git.commit(
-      `remember(${scope}): ${title}`,
+      `remember(${projectScope}, store=${writeScope}): ${title}`,
       [vaultManager.noteRelPath(vault, id)]
     );
     await vault.git.push();
 
     const vaultLabel = vault.isProject ? " [project vault]" : " [main vault]";
     return {
-      content: [{ type: "text", text: `Remembered as \`${id}\` [${scope}]${vaultLabel}` }],
+      content: [{ type: "text", text: `Remembered as \`${id}\` [${projectScope}, stored=${writeScope}]${vaultLabel}` }],
     };
   }
 );
@@ -310,7 +326,7 @@ server.registerTool(
   "update",
   {
     title: "Update Memory",
-    description: "Update the content, title, or tags of an existing memory by id.",
+    description: "Update the content, title, or tags of an existing memory by id. `cwd` helps locate project notes but does not change project metadata.",
     inputSchema: z.object({
       id: z.string().describe("Memory id to update"),
       content: z.string().optional(),
@@ -326,7 +342,6 @@ server.registerTool(
     }
 
     const { note, vault } = found;
-    const project = await resolveProject(cwd);
     const now = new Date().toISOString();
     const cleanedContent = content === undefined ? undefined : await cleanMarkdown(content);
 
@@ -335,8 +350,6 @@ server.registerTool(
       title: title ?? note.title,
       content: cleanedContent ?? note.content,
       tags: tags ?? note.tags,
-      project: project?.id ?? note.project,
-      projectName: project?.name ?? note.projectName,
       updatedAt: now,
     };
 

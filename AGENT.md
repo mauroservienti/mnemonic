@@ -55,7 +55,10 @@ There are two kinds of vault:
 - **Project vault** (`<git-root>/.mnemonic/`) — project-specific memories committed directly into the project repo. Created on demand when `remember` is called with a `cwd`. Collaborators cloning the project repo get the vault for free.
 
 Routing rules:
-- `remember` with `cwd` → writes to the project vault (creates `.mnemonic/` if absent); without `cwd` → writes to main vault.
+- `cwd` identifies project context; write location is a separate choice.
+- `remember` with `cwd` and `scope: "project"` → writes to the project vault (creates `.mnemonic/` if absent).
+- `remember` with `cwd` and `scope: "global"` → writes to the main vault but keeps the project id/name in frontmatter.
+- `remember` without `cwd` → writes to the main vault as a normal global memory.
 - `recall`, `list`, `get`, `sync`, `reindex` — operate on the project vault first, then the main vault.
 - `relate`/`unrelate`/`forget` — find notes in any vault; commit changes per vault.
 
@@ -163,7 +166,7 @@ We switched from HS256 to RS256 because...
 | Tool             | Description                                                                    |
 |------------------|--------------------------------------------------------------------------------|
 | `detect_project` | Resolve a `cwd` to a stable project id via git remote URL                     |
-| `remember`       | Write a note + embedding, git commit + push                                    |
+| `remember`       | Write a note + embedding; `cwd` sets project context and `scope` picks storage |
 | `recall`         | Semantic search with optional project boost                                    |
 | `update`         | Update note content/title/tags, always re-embeds                               |
 | `forget`         | Delete note + embedding, git commit + push; cleans up dangling relationships   |
