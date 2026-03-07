@@ -30,6 +30,7 @@ There are two kinds of vault:
 When you call `remember` with a `cwd`, the note goes into the project vault (`.mnemonic/` inside the project repo). Collaborators who clone the project get the vault automatically. Without `cwd`, the note goes into the main vault.
 
 Notes are plain markdown with YAML frontmatter — readable, diffable, mergeable.
+Memory content is markdown-linted on `remember`/`update`: fixable issues are auto-corrected before save, and non-fixable issues are rejected.
 Embeddings stay local (gitignored) and are rebuilt on each machine with `reindex`.
 
 ## Project scoping

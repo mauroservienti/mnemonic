@@ -9,6 +9,7 @@ import { promises as fs } from "fs";
 import { Storage, type Note, type RelationshipType } from "./storage.js";
 import { embed, cosineSimilarity, embedModel } from "./embeddings.js";
 import { type SyncResult } from "./git.js";
+import { cleanMarkdown } from "./markdown.js";
 import { detectProject } from "./project.js";
 import { VaultManager, type Vault } from "./vault.js";
 
@@ -177,6 +178,7 @@ server.registerTool(
   },
   async ({ title, content, tags, cwd }) => {
     const project = await resolveProject(cwd);
+    const cleanedContent = await cleanMarkdown(content);
 
     // Route to project vault when cwd is given, fall back to main vault
     const vault = cwd
@@ -187,7 +189,7 @@ server.registerTool(
     const now = new Date().toISOString();
 
     const note: Note = {
-      id, title, content, tags,
+      id, title, content: cleanedContent, tags,
       project: project?.id,
       projectName: project?.name,
       createdAt: now,
@@ -197,7 +199,7 @@ server.registerTool(
     await vault.storage.writeNote(note);
 
     try {
-      const vector = await embed(`${title}\n\n${content}`);
+      const vector = await embed(`${title}\n\n${cleanedContent}`);
       await vault.storage.writeEmbedding({ id, model: embedModel, embedding: vector, updatedAt: now });
     } catch (err) {
       console.error(`[embedding] Skipped for '${id}': ${err}`);
@@ -326,11 +328,12 @@ server.registerTool(
     const { note, vault } = found;
     const project = await resolveProject(cwd);
     const now = new Date().toISOString();
+    const cleanedContent = content === undefined ? undefined : await cleanMarkdown(content);
 
     const updated: Note = {
       ...note,
       title: title ?? note.title,
-      content: content ?? note.content,
+      content: cleanedContent ?? note.content,
       tags: tags ?? note.tags,
       project: project?.id ?? note.project,
       projectName: project?.name ?? note.projectName,
