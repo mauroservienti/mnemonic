@@ -210,6 +210,25 @@ Store a memory whenever you learn something useful to know in a future session:
 
 When in doubt, store it. Storage is cheap; re-explaining context is expensive.
 
+### After every `remember` — check for relationships immediately
+You have full session context right now. That advantage is gone next session.
+Before moving on, ask yourself:
+
+1. Did I `recall` anything earlier in this session that this note connects to?
+2. Did I just store multiple notes in this session that relate to each other?
+3. Does the new note explain, exemplify, or supersede something I already know exists?
+
+If yes to any of these, call `relate` now. Pick the most specific type:
+
+| If the new note…                                  | Use           |
+|---------------------------------------------------|---------------|
+| and the other note are about the same topic       | `related-to`  |
+| clarifies *why* the other note's decision was made | `explains`   |
+| is a concrete case of a general pattern           | `example-of`  |
+| replaces a previous decision or approach          | `supersedes`  |
+
+If nothing comes to mind within a few seconds, skip it — don't force links.
+
 ### When to call `update`
 - When a stored memory becomes outdated — a decision was revisited, a dependency
   upgraded, a pattern changed.
@@ -224,11 +243,6 @@ When in doubt, store it. Storage is cheap; re-explaining context is expensive.
 ### Working with relationships
 - After `recall`, check the `related:` line in each result. Call `get` with those ids
   to pull in the linked context before acting — you may already have the answer.
-- Call `relate` when two memories clearly belong together:
-  - A decision and the bug that motivated it (`related-to`)
-  - An architectural note and a concrete implementation (`explains`)
-  - A pattern and a specific usage of it (`example-of`)
-  - A revised decision and the old one it replaced (`supersedes`)
 - Prefer `supersedes` over `forget` when the old memory has historical value.
 - Don't over-link. One or two meaningful edges per note is better than linking everything.
 
