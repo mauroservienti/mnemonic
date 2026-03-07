@@ -361,13 +361,14 @@ server.registerTool(
   "forget",
   {
     title: "Forget",
-    description: "Delete a memory by id. Cleans up dangling relationships across all known vaults.",
+    description: "Delete a memory by id. Pass `cwd` when targeting project memories from a fresh project-scoped server.",
     inputSchema: z.object({
       id: z.string().describe("Memory id to delete"),
+      cwd: projectParam,
     }),
   },
-  async ({ id }) => {
-    const found = await vaultManager.findNote(id);
+  async ({ id, cwd }) => {
+    const found = await vaultManager.findNote(id, cwd);
     if (!found) {
       return { content: [{ type: "text", text: `No memory found with id '${id}'` }] };
     }
@@ -567,16 +568,17 @@ server.registerTool(
   "get",
   {
     title: "Get Memories by ID",
-    description: "Fetch one or more memories by their exact id. Searches all known vaults.",
+    description: "Fetch one or more memories by their exact id. Pass `cwd` to include the current project vault.",
     inputSchema: z.object({
       ids: z.array(z.string()).min(1).describe("One or more memory ids to fetch"),
+      cwd: projectParam,
     }),
   },
-  async ({ ids }) => {
+  async ({ ids, cwd }) => {
     const sections: string[] = [];
     const missing: string[] = [];
     for (const id of ids) {
-      const found = await vaultManager.findNote(id);
+      const found = await vaultManager.findNote(id, cwd);
       if (found) {
         sections.push(formatNote(found.note));
       } else {
@@ -605,18 +607,20 @@ server.registerTool(
     description:
       "Create a typed relationship between two memories. " +
       "By default adds the relationship in both directions. " +
-      "Notes may be in different vaults — each vault gets its own commit.",
+      "Notes may be in different vaults — each vault gets its own commit. " +
+      "Pass `cwd` to include the current project vault when resolving ids.",
     inputSchema: z.object({
       fromId: z.string().describe("The source memory id"),
       toId: z.string().describe("The target memory id"),
       type: z.enum(RELATIONSHIP_TYPES).default("related-to"),
       bidirectional: z.boolean().optional().default(true),
+      cwd: projectParam,
     }),
   },
-  async ({ fromId, toId, type, bidirectional }) => {
+  async ({ fromId, toId, type, bidirectional, cwd }) => {
     const [foundFrom, foundTo] = await Promise.all([
-      vaultManager.findNote(fromId),
-      vaultManager.findNote(toId),
+      vaultManager.findNote(fromId, cwd),
+      vaultManager.findNote(toId, cwd),
     ]);
     if (!foundFrom) return { content: [{ type: "text", text: `No memory found with id '${fromId}'` }] };
     if (!foundTo) return { content: [{ type: "text", text: `No memory found with id '${toId}'` }] };
@@ -667,17 +671,18 @@ server.registerTool(
   "unrelate",
   {
     title: "Remove Relationship",
-    description: "Remove the relationship between two memories. Removes both directions by default.",
+    description: "Remove the relationship between two memories. Pass `cwd` to include the current project vault.",
     inputSchema: z.object({
       fromId: z.string().describe("The source memory id"),
       toId: z.string().describe("The target memory id"),
       bidirectional: z.boolean().optional().default(true),
+      cwd: projectParam,
     }),
   },
-  async ({ fromId, toId, bidirectional }) => {
+  async ({ fromId, toId, bidirectional, cwd }) => {
     const [foundFrom, foundTo] = await Promise.all([
-      vaultManager.findNote(fromId),
-      vaultManager.findNote(toId),
+      vaultManager.findNote(fromId, cwd),
+      vaultManager.findNote(toId, cwd),
     ]);
 
     const now = new Date().toISOString();

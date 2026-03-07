@@ -8,6 +8,15 @@ The core idea: store everything as plain markdown files in a git repo, compute e
 
 Inspired by [petabridge/memorizer](https://github.com/petabridge/memorizer) but without the Postgres/pgvector dependency.
 
+## Dogfooding protocol
+
+When implementing a new feature or behavior in mnemonic itself, dogfood the local MCP server as part of the work:
+- Rebuild first (`npm run build`) so the stdio server uses the latest code.
+- Use the project-scoped `mnemonic` MCP server for real operations whenever the feature touches memory behavior, note formatting, retrieval, relationships, sync, or indexing.
+- Prefer exercising the feature through MCP tools (`remember`, `update`, `get`, `relate`, `recall`, etc.) instead of writing `.mnemonic/` files directly.
+- Mnemoize important implementation decisions, tradeoffs, and debugging findings through the MCP server so future agents can recall them.
+- If manual file edits are temporarily needed for recovery or cleanup, follow up by recreating or validating the final state through MCP before considering the task done.
+
 ## Design decisions and rationale
 
 ### Markdown + YAML frontmatter as storage

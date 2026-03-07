@@ -38,6 +38,7 @@ export class VaultManager {
     await this.main.git.init();
     await ensureGitignore(path.join(this.main.storage.vaultPath, ".gitignore"));
     this.mainGitRoot = (await findGitRoot(this.main.storage.vaultPath)) ?? this.main.storage.vaultPath;
+    await this.preloadCurrentProjectVault();
   }
 
   /**
@@ -88,6 +89,11 @@ export class VaultManager {
       const pv = await this.getProjectVaultIfExists(cwd);
       if (pv) vaults.push(pv);
     }
+    for (const vault of this.projectVaults.values()) {
+      if (!vaults.includes(vault)) {
+        vaults.push(vault);
+      }
+    }
     vaults.push(this.main);
     return vaults;
   }
@@ -130,6 +136,15 @@ export class VaultManager {
 
     this.projectVaults.set(resolved, vault);
     return vault;
+  }
+
+  private async preloadCurrentProjectVault(): Promise<void> {
+    const gitRoot = await findGitRoot(process.cwd());
+    if (!gitRoot || this.isMainRepo(gitRoot)) {
+      return;
+    }
+
+    await this.loadProjectVault(gitRoot, false);
   }
 }
 
