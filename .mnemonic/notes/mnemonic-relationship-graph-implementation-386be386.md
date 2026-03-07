@@ -6,7 +6,7 @@ tags:
   - feature
   - architecture
 createdAt: '2026-03-07T17:59:57.597Z'
-updatedAt: '2026-03-07T18:00:15.571Z'
+updatedAt: '2026-03-07T18:37:18.520Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
 relatedTo:
@@ -20,11 +20,13 @@ Added typed relationship graph stored in note frontmatter.
 **Types:** `"related-to" | "explains" | "example-of" | "supersedes"`
 
 **`storage.ts` changes:**
+
 - Added `RelationshipType` union type and `Relationship` interface
 - Added `relatedTo?: Relationship[]` to `Note`
 - `writeNote` serializes when non-empty; `parseNote` reads it back
 
 **`index.ts` changes:**
+
 - `formatNote` shows `related: \`id\` (type), ...` line
 - `forget` scans all notes after delete and strips dangling `relatedTo` references, commits affected files
 - New `get` tool — fetch by exact id(s)
