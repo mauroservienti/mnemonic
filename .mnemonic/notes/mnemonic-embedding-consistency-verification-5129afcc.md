@@ -7,9 +7,12 @@ tags:
   - quality
   - architecture
 createdAt: '2026-03-07T23:26:43.327Z'
-updatedAt: '2026-03-07T23:26:43.327Z'
+updatedAt: '2026-03-07T23:26:57.701Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
+relatedTo:
+  - id: mnemonic-consolidate-tool-design-b9cbac6a
+    type: related-to
 ---
 Comprehensive verification of embedding handling across all mutating MCP commands.
 
