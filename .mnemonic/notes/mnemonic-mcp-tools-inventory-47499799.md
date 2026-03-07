@@ -5,7 +5,7 @@ tags:
   - mcp
   - api
 createdAt: '2026-03-07T17:59:25.498Z'
-updatedAt: '2026-03-07T20:04:19.612Z'
+updatedAt: '2026-03-07T23:22:58.358Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
 relatedTo:
@@ -18,7 +18,7 @@ Tools registered in `src/index.ts`:
 | ---- | ----------- |
 | `detect_project` | Resolve `cwd` to stable project id via git remote URL; includes current write policy |
 | `remember` | Write note + embedding with project context from `cwd` and storage controlled by `scope` |
-| `set_project_memory_policy` | Set the default write scope for a project (`project`, `global`, `ask`) |
+| `set_project_memory_policy` | Set the default write scope and consolidation mode for a project |
 | `get_project_memory_policy` | Show the saved default write scope for a project |
 | `project_memory_summary` | Summarize what mnemonic knows about the current project |
 | `recall` | Semantic search with optional project boost (+0.15) |
@@ -34,7 +34,8 @@ Tools registered in `src/index.ts`:
 | `memory_graph` | Show a compact adjacency list of note relationships |
 | `sync` | fetch -> pull (rebase) -> push -> auto-embed pulled notes |
 | `reindex` | Rebuild missing embeddings; uses bounded parallel embedding from `config.json` and `force=true` rebuilds all |
+| `consolidate` | Analyze and consolidate memories — detect duplicates, suggest merges, execute with `supersedes` or `delete` mode |
 
 Relationship types: `related-to`, `explains`, `example-of`, `supersedes`.
 
-Main-vault operational config lives in `config.json`, including `reindexEmbedConcurrency` and per-project memory policies.
+Main-vault operational config lives in `config.json`, including `reindexEmbedConcurrency`, per-project memory policies, and consolidation mode defaults.

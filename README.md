@@ -247,7 +247,7 @@ If you prefer a fixed installed version, point your MCP client at the local bina
 |------------------|---------------------------------------------------------------------------------|
 | `detect_project` | Identify the project for a given `cwd` (git remote → slug)                     |
 | `remember`       | Store a memory with project context from `cwd` and storage controlled by `scope` |
-| `set_project_memory_policy` | Set the default write scope for a project (`project`, `global`, or `ask`) |
+| `set_project_memory_policy` | Set the default write scope and consolidation mode for a project |
 | `get_project_memory_policy` | Show the saved default write scope for a project                    |
 | `project_memory_summary` | Summarize what mnemonic knows about the current project                 |
 | `recall`         | Semantic search — project-boosted when `cwd` provided                           |
@@ -263,6 +263,7 @@ If you prefer a fixed installed version, point your MCP client at the local bina
 | `memory_graph`   | Show a compact adjacency list of memory relationships                           |
 | `sync`           | Bidirectional sync — pulls remote, pushes local commits, auto-embeds new notes  |
 | `reindex`        | Manually rebuild missing embeddings (sync does this automatically)              |
+| `consolidate`    | Analyze and consolidate memories — detect duplicates, suggest merges, execute with `supersedes` (default) or `delete` mode |
 
 ## Relationships
 
@@ -420,6 +421,21 @@ If nothing comes to mind within a few seconds, skip it — don't force links.
   to pull in the linked context before acting — you may already have the answer.
 - Prefer `supersedes` over `forget` when the old memory has historical value.
 - Don't over-link. One or two meaningful edges per note is better than linking everything.
+
+### When to call `consolidate`
+- When you notice duplicate or highly similar memories from repeated `remember` calls
+- When a cluster of related notes should become one comprehensive note
+- When you want to clean up the memory graph and reduce fragmentation
+
+**Consolidation modes:**
+- `supersedes` (default) — Creates a new consolidated note and marks sources with `supersedes` relationship. Preserves history, allows pruning later.
+- `delete` — Creates a new consolidated note and deletes sources. Clean and immediate.
+
+**Workflow:**
+1. Run `consolidate` with `strategy: "dry-run"` to see analysis
+2. Review `suggest-merges` output for actionable recommendations
+3. Execute a merge with `strategy: "execute-merge"` and a `mergePlan`
+4. Later, use `prune-superseded` to clean up old notes if using `supersedes` mode
 
 ### Scoping rules
 - Pass `cwd` for anything specific to the current project.

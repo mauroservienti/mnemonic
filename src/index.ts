@@ -6,15 +6,19 @@ import { randomUUID } from "crypto";
 import path from "path";
 import { promises as fs } from "fs";
 
-import { Storage, type Note, type RelationshipType } from "./storage.js";
+import { Storage, type Note, type Relationship, type RelationshipType } from "./storage.js";
 import { embed, cosineSimilarity, embedModel } from "./embeddings.js";
 import { type SyncResult } from "./git.js";
 import { cleanMarkdown } from "./markdown.js";
 import { MnemonicConfigStore } from "./config.js";
 import {
+  CONSOLIDATION_MODES,
   PROJECT_POLICY_SCOPES,
   WRITE_SCOPES,
+  resolveConsolidationMode,
   resolveWriteScope,
+  type ConsolidationMode,
+  type ProjectMemoryPolicy,
   type ProjectPolicyScope,
   type WriteScope,
 } from "./project-memory-policy.js";
@@ -414,29 +418,35 @@ server.registerTool(
   {
     title: "Set Project Memory Policy",
     description:
-      "Choose the default write scope for a project. This lets agents avoid asking " +
-      "where to store project-related memories every time.",
+      "Choose the default write scope and consolidation mode for a project. " +
+      "This lets agents avoid asking where to store memories and how to handle consolidation.",
     inputSchema: z.object({
       cwd: z.string().describe("Absolute path to the project working directory"),
       defaultScope: z.enum(PROJECT_POLICY_SCOPES).describe("Default storage location for project-related memories"),
+      consolidationMode: z.enum(CONSOLIDATION_MODES).optional().describe(
+        "Default consolidation mode: 'supersedes' preserves history (default), 'delete' removes sources"
+      ),
     }),
   },
-  async ({ cwd, defaultScope }) => {
+  async ({ cwd, defaultScope, consolidationMode }) => {
     const project = await resolveProject(cwd);
     if (!project) {
       return { content: [{ type: "text", text: `Could not detect a project for: ${cwd}` }] };
     }
 
     const now = new Date().toISOString();
-    await configStore.setProjectPolicy({
+    const policy: ProjectMemoryPolicy = {
       projectId: project.id,
       projectName: project.name,
       defaultScope,
+      consolidationMode,
       updatedAt: now,
-    });
+    };
+    await configStore.setProjectPolicy(policy);
 
+    const modeStr = consolidationMode ? `, consolidationMode=${consolidationMode}` : "";
     await vaultManager.main.git.commit(
-      `policy(${project.id}): default memory scope ${defaultScope}`,
+      `policy(${project.id}): default memory scope ${defaultScope}${modeStr}`,
       ["config.json"]
     );
     await vaultManager.main.git.push();
@@ -444,7 +454,7 @@ server.registerTool(
     return {
       content: [{
         type: "text",
-      text: `Project memory policy set for ${project.name}: defaultScope=${defaultScope}`,
+        text: `Project memory policy set for ${project.name}: defaultScope=${defaultScope}${modeStr}`,
       }],
     };
   }
@@ -1197,6 +1207,530 @@ server.registerTool(
     return { content: [{ type: "text", text: `Removed relationship between \`${fromId}\` and \`${toId}\`` }] };
   }
 );
+
+// ── consolidate ───────────────────────────────────────────────────────────────
+server.registerTool(
+  "consolidate",
+  {
+    title: "Consolidate Memories",
+    description:
+      "Analyze memories for consolidation opportunities or execute merges. " +
+      "Strategies that modify data (execute-merge, prune-superseded) require confirmation. " +
+      "Cross-vault: gathers notes from both main and project vaults for the detected project.",
+    inputSchema: z.object({
+      cwd: projectParam,
+      strategy: z
+        .enum([
+          "detect-duplicates",
+          "find-clusters",
+          "suggest-merges",
+          "execute-merge",
+          "prune-superseded",
+          "dry-run",
+        ])
+        .describe("Analysis or action to perform"),
+      mode: z
+        .enum(CONSOLIDATION_MODES)
+        .optional()
+        .describe("Override the project's default consolidation mode (supersedes or delete)"),
+      threshold: z
+        .number()
+        .min(0)
+        .max(1)
+        .optional()
+        .default(0.85)
+        .describe("Similarity threshold for detecting duplicates"),
+      mergePlan: z
+        .object({
+          sourceIds: z.array(z.string()).min(2).describe("Notes to merge into a single consolidated note"),
+          targetTitle: z.string().describe("Title for the consolidated note"),
+          description: z.string().optional().describe("Optional context explaining the consolidation"),
+          tags: z.array(z.string()).optional().describe("Tags for the consolidated note (defaults to union of source tags)"),
+        })
+        .optional()
+        .describe("Required for execute-merge strategy"),
+    }),
+  },
+  async ({ cwd, strategy, mode, threshold, mergePlan }) => {
+    const project = await resolveProject(cwd);
+    if (!project && strategy !== "dry-run") {
+      return { content: [{ type: "text", text: `Could not detect a project for: ${cwd}` }] };
+    }
+
+    // Gather notes from all vaults (project + main) for this project
+    const { entries } = await collectVisibleNotes(cwd, "all", undefined, "any");
+    const projectNotes = project
+      ? entries.filter((e) => e.note.project === project.id)
+      : entries.filter((e) => !e.note.project);
+
+    if (projectNotes.length === 0) {
+      return { content: [{ type: "text", text: "No memories found to consolidate." }] };
+    }
+
+    // Resolve consolidation mode
+    const policy = project ? await configStore.getProjectPolicy(project.id) : undefined;
+    const consolidationMode = mode ?? resolveConsolidationMode(policy);
+
+    switch (strategy) {
+      case "detect-duplicates":
+        return detectDuplicates(projectNotes, threshold, project);
+
+      case "find-clusters":
+        return findClusters(projectNotes, project);
+
+      case "suggest-merges":
+        return suggestMerges(projectNotes, threshold, consolidationMode, project);
+
+      case "execute-merge":
+        if (!mergePlan) {
+          return { content: [{ type: "text", text: "execute-merge strategy requires a mergePlan with sourceIds and targetTitle." }] };
+        }
+        return executeMerge(projectNotes, mergePlan, consolidationMode, project, cwd);
+
+      case "prune-superseded":
+        return pruneSuperseded(projectNotes, consolidationMode, project);
+
+      case "dry-run":
+        return dryRunAll(projectNotes, threshold, consolidationMode, project);
+
+      default:
+        return { content: [{ type: "text", text: `Unknown strategy: ${strategy}` }] };
+    }
+  }
+);
+
+// Consolidate helper functions
+async function detectDuplicates(
+  entries: NoteEntry[],
+  threshold: number,
+  project: Awaited<ReturnType<typeof resolveProject>>,
+): Promise<{ content: Array<{ type: "text"; text: string }> }> {
+  const lines: string[] = [];
+  lines.push(`Duplicate detection for ${project?.name ?? "global"} (similarity > ${threshold}):`);
+  lines.push("");
+
+  const checked = new Set<string>();
+  let foundCount = 0;
+
+  for (let i = 0; i < entries.length; i++) {
+    const entryA = entries[i]!;
+    if (checked.has(entryA.note.id)) continue;
+
+    const embeddingA = await entryA.vault.storage.readEmbedding(entryA.note.id);
+    if (!embeddingA) continue;
+
+    for (let j = i + 1; j < entries.length; j++) {
+      const entryB = entries[j]!;
+      if (checked.has(entryB.note.id)) continue;
+
+      const embeddingB = await entryB.vault.storage.readEmbedding(entryB.note.id);
+      if (!embeddingB) continue;
+
+      const similarity = cosineSimilarity(embeddingA.embedding, embeddingB.embedding);
+      if (similarity >= threshold) {
+        foundCount++;
+        lines.push(`${foundCount}. ${entryA.note.title} (${entryA.note.id})`);
+        lines.push(`   └── ${entryB.note.title} (${entryB.note.id})`);
+        lines.push(`   Similarity: ${similarity.toFixed(3)}`);
+        lines.push("");
+        checked.add(entryA.note.id);
+        checked.add(entryB.note.id);
+      }
+    }
+  }
+
+  if (foundCount === 0) {
+    lines.push("No duplicates found above the similarity threshold.");
+  } else {
+    lines.push(`Found ${foundCount} potential duplicate pair(s).`);
+    lines.push("Use 'suggest-merges' strategy for actionable recommendations.");
+  }
+
+  return { content: [{ type: "text", text: lines.join("\n") }] };
+}
+
+function findClusters(
+  entries: NoteEntry[],
+  project: Awaited<ReturnType<typeof resolveProject>>,
+): { content: Array<{ type: "text"; text: string }> } {
+  const lines: string[] = [];
+  lines.push(`Cluster analysis for ${project?.name ?? "global"}:`);
+  lines.push("");
+
+  // Group by theme
+  const themed = new Map<string, NoteEntry[]>();
+  for (const entry of entries) {
+    const theme = classifyTheme(entry.note);
+    const bucket = themed.get(theme) ?? [];
+    bucket.push(entry);
+    themed.set(theme, bucket);
+  }
+
+  // Find relationship clusters
+  const idToEntry = new Map(entries.map((e) => [e.note.id, e]));
+  const visited = new Set<string>();
+  const clusters: NoteEntry[][] = [];
+
+  for (const entry of entries) {
+    if (visited.has(entry.note.id)) continue;
+
+    const cluster: NoteEntry[] = [];
+    const queue = [entry];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (visited.has(current.note.id)) continue;
+      visited.add(current.note.id);
+      cluster.push(current);
+
+      // Add related notes to queue
+      for (const rel of current.note.relatedTo ?? []) {
+        const related = idToEntry.get(rel.id);
+        if (related && !visited.has(rel.id)) {
+          queue.push(related);
+        }
+      }
+    }
+
+    if (cluster.length > 1) {
+      clusters.push(cluster);
+    }
+  }
+
+  // Output theme groups
+  lines.push("By Theme:");
+  for (const [theme, bucket] of themed) {
+    if (bucket.length > 1) {
+      lines.push(`  ${titleCaseTheme(theme)} (${bucket.length} notes)`);
+      for (const entry of bucket.slice(0, 3)) {
+        lines.push(`    - ${entry.note.title}`);
+      }
+      if (bucket.length > 3) {
+        lines.push(`    ... and ${bucket.length - 3} more`);
+      }
+    }
+  }
+
+  // Output relationship clusters
+  if (clusters.length > 0) {
+    lines.push("");
+    lines.push("Connected Clusters (via relationships):");
+    for (let i = 0; i < clusters.length; i++) {
+      const cluster = clusters[i]!;
+      lines.push(`  Cluster ${i + 1} (${cluster.length} notes):`);
+      const hub = cluster.reduce((max, e) =>
+        (e.note.relatedTo?.length ?? 0) > (max.note.relatedTo?.length ?? 0) ? e : max
+      );
+      lines.push(`    Hub: ${hub.note.title}`);
+      for (const entry of cluster) {
+        if (entry.note.id !== hub.note.id) {
+          lines.push(`    - ${entry.note.title}`);
+        }
+      }
+    }
+  }
+
+  return { content: [{ type: "text", text: lines.join("\n") }] };
+}
+
+async function suggestMerges(
+  entries: NoteEntry[],
+  threshold: number,
+  consolidationMode: ConsolidationMode,
+  project: Awaited<ReturnType<typeof resolveProject>>,
+): Promise<{ content: Array<{ type: "text"; text: string }> }> {
+  const lines: string[] = [];
+  lines.push(`Merge suggestions for ${project?.name ?? "global"} (mode: ${consolidationMode}):`);
+  lines.push("");
+
+  const checked = new Set<string>();
+  let suggestionCount = 0;
+
+  for (let i = 0; i < entries.length; i++) {
+    const entryA = entries[i]!;
+    if (checked.has(entryA.note.id)) continue;
+
+    const embeddingA = await entryA.vault.storage.readEmbedding(entryA.note.id);
+    if (!embeddingA) continue;
+
+    const similar: Array<{ entry: NoteEntry; similarity: number }> = [];
+
+    for (let j = i + 1; j < entries.length; j++) {
+      const entryB = entries[j]!;
+      if (checked.has(entryB.note.id)) continue;
+
+      const embeddingB = await entryB.vault.storage.readEmbedding(entryB.note.id);
+      if (!embeddingB) continue;
+
+      const similarity = cosineSimilarity(embeddingA.embedding, embeddingB.embedding);
+      if (similarity >= threshold) {
+        similar.push({ entry: entryB, similarity });
+      }
+    }
+
+    if (similar.length > 0) {
+      suggestionCount++;
+      similar.sort((a, b) => b.similarity - a.similarity);
+      const sources = [entryA, ...similar.map((s) => s.entry)];
+
+      lines.push(`${suggestionCount}. MERGE ${sources.length} NOTES`);
+      lines.push(`   Into: "${entryA.note.title} (consolidated)"`);
+      lines.push("   Sources:");
+      for (const src of sources) {
+        const simStr = src.note.id === entryA.note.id ? "" : ` (${similar.find((s) => s.entry.note.id === src.note.id)?.similarity.toFixed(3)})`;
+        lines.push(`     - ${src.note.title} (${src.note.id})${simStr}`);
+      }
+      lines.push(`   Mode: ${consolidationMode} (${consolidationMode === "supersedes" ? "preserves history" : "removes sources"})`);
+      lines.push("   To execute:");
+      lines.push(`     consolidate({ strategy: "execute-merge", mergePlan: {`);
+      lines.push(`       sourceIds: [${sources.map((s) => `"${s.note.id}"`).join(", ")}],`);
+      lines.push(`       targetTitle: "${entryA.note.title} (consolidated)"`);
+      lines.push(`     }})`);
+      lines.push("");
+
+      checked.add(entryA.note.id);
+      for (const s of similar) checked.add(s.entry.note.id);
+    }
+  }
+
+  if (suggestionCount === 0) {
+    lines.push("No merge suggestions found. Try lowering the threshold or manual review.");
+  } else {
+    lines.push(`Generated ${suggestionCount} merge suggestion(s). Review carefully before executing.`);
+  }
+
+  return { content: [{ type: "text", text: lines.join("\n") }] };
+}
+
+async function executeMerge(
+  entries: NoteEntry[],
+  mergePlan: { sourceIds: string[]; targetTitle: string; description?: string; tags?: string[] },
+  consolidationMode: ConsolidationMode,
+  project: Awaited<ReturnType<typeof resolveProject>>,
+  cwd?: string,
+): Promise<{ content: Array<{ type: "text"; text: string }> }> {
+  const { sourceIds, targetTitle, description, tags } = mergePlan;
+
+  // Find all source entries
+  const sourceEntries: NoteEntry[] = [];
+  for (const id of sourceIds) {
+    const entry = entries.find((e) => e.note.id === id);
+    if (!entry) {
+      return { content: [{ type: "text", text: `Source note '${id}' not found.` }] };
+    }
+    sourceEntries.push(entry);
+  }
+
+  const projectVault = cwd ? await vaultManager.getOrCreateProjectVault(cwd) : null;
+  const targetVault = projectVault ?? vaultManager.main;
+  const now = new Date().toISOString();
+
+  // Build consolidated content
+  const sections: string[] = [];
+  if (description) {
+    sections.push(description);
+    sections.push("");
+  }
+  sections.push("## Consolidated from:");
+  for (const entry of sourceEntries) {
+    sections.push(`### ${entry.note.title}`);
+    sections.push(`*Source: \`${entry.note.id}\`*`);
+    sections.push("");
+    sections.push(entry.note.content);
+    sections.push("");
+  }
+
+  // Combine tags (deduplicated)
+  const combinedTags = tags ?? Array.from(new Set(sourceEntries.flatMap((e) => e.note.tags)));
+
+  // Collect all unique relationships from sources (excluding relationships among sources)
+  const sourceIdsSet = new Set(sourceIds);
+  const allRelationships: Relationship[] = [];
+  for (const entry of sourceEntries) {
+    for (const rel of entry.note.relatedTo ?? []) {
+      if (!sourceIdsSet.has(rel.id) && !allRelationships.some((r) => r.id === rel.id)) {
+        allRelationships.push(rel);
+      }
+    }
+  }
+
+  // Create consolidated note
+  const targetId = makeId(targetTitle);
+  const consolidatedNote: Note = {
+    id: targetId,
+    title: targetTitle,
+    content: sections.join("\n").trim(),
+    tags: combinedTags,
+    project: project?.id,
+    projectName: project?.name,
+    relatedTo: allRelationships,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  // Write consolidated note
+  await targetVault.storage.writeNote(consolidatedNote);
+
+  // Generate embedding for consolidated note
+  try {
+    const vector = await embed(`${targetTitle}\n\n${consolidatedNote.content}`);
+    await targetVault.storage.writeEmbedding({
+      id: targetId,
+      model: embedModel,
+      embedding: vector,
+      updatedAt: now,
+    });
+  } catch (err) {
+    console.error(`[embedding] Failed for consolidated note '${targetId}': ${err}`);
+  }
+
+  const vaultChanges = new Map<Vault, string[]>();
+
+  // Handle sources based on consolidation mode
+  if (consolidationMode === "delete") {
+    // Delete all sources
+    for (const entry of sourceEntries) {
+      await entry.vault.storage.deleteNote(entry.note.id);
+      const files = vaultChanges.get(entry.vault) ?? [];
+      files.push(vaultManager.noteRelPath(entry.vault, entry.note.id));
+      vaultChanges.set(entry.vault, files);
+    }
+  } else {
+    // supersedes mode: mark sources with supersedes relationship
+    for (const entry of sourceEntries) {
+      const updatedRels = [...(entry.note.relatedTo ?? [])];
+      if (!updatedRels.some((r) => r.id === targetId)) {
+        updatedRels.push({ id: targetId, type: "supersedes" });
+      }
+      await entry.vault.storage.writeNote({
+        ...entry.note,
+        relatedTo: updatedRels,
+        updatedAt: now,
+      });
+      const files = vaultChanges.get(entry.vault) ?? [];
+      files.push(vaultManager.noteRelPath(entry.vault, entry.note.id));
+      vaultChanges.set(entry.vault, files);
+    }
+  }
+
+  // Add consolidated note to changes
+  const targetFiles = vaultChanges.get(targetVault) ?? [];
+  targetFiles.push(vaultManager.noteRelPath(targetVault, targetId));
+  vaultChanges.set(targetVault, targetFiles);
+
+  // Commit changes per vault
+  for (const [vault, files] of vaultChanges) {
+    const action = consolidationMode === "delete" ? "consolidate(delete)" : "consolidate(supersedes)";
+    await vault.git.commit(`${action}: ${targetTitle}`, files);
+    await vault.git.push();
+  }
+
+  const lines: string[] = [];
+  lines.push(`Consolidated ${sourceIds.length} notes into '${targetId}'`);
+  lines.push(`Mode: ${consolidationMode}`);
+  lines.push(`Stored in: ${targetVault.isProject ? "project-vault" : "main-vault"}`);
+  if (consolidationMode === "supersedes") {
+    lines.push("Sources preserved with 'supersedes' relationship.");
+    lines.push("Use 'prune-superseded' later to clean up if desired.");
+  } else {
+    lines.push("Source notes deleted.");
+  }
+
+  return { content: [{ type: "text", text: lines.join("\n") }] };
+}
+
+async function pruneSuperseded(
+  entries: NoteEntry[],
+  consolidationMode: ConsolidationMode,
+  project: Awaited<ReturnType<typeof resolveProject>>,
+): Promise<{ content: Array<{ type: "text"; text: string }> }> {
+  if (consolidationMode !== "delete") {
+    return {
+      content: [{
+        type: "text",
+        text: `prune-superseded requires consolidationMode="delete". Current mode: ${consolidationMode}.\nSet mode explicitly or update project policy.`,
+      }],
+    };
+  }
+
+  const lines: string[] = [];
+  lines.push(`Pruning superseded notes for ${project?.name ?? "global"}:`);
+  lines.push("");
+
+  // Find all notes that have a supersedes relationship pointing to them
+  const supersededIds = new Set<string>();
+  const supersededBy = new Map<string, string>();
+
+  for (const entry of entries) {
+    for (const rel of entry.note.relatedTo ?? []) {
+      if (rel.type === "supersedes") {
+        supersededIds.add(entry.note.id);
+        supersededBy.set(entry.note.id, rel.id);
+      }
+    }
+  }
+
+  if (supersededIds.size === 0) {
+    lines.push("No superseded notes found.");
+    return { content: [{ type: "text", text: lines.join("\n") }] };
+  }
+
+  lines.push(`Found ${supersededIds.size} superseded note(s) to prune:`);
+  const vaultChanges = new Map<Vault, string[]>();
+
+  for (const id of supersededIds) {
+    const entry = entries.find((e) => e.note.id === id);
+    if (!entry) continue;
+
+    const targetId = supersededBy.get(id);
+    lines.push(`  - ${entry.note.title} (${id}) -> superseded by ${targetId}`);
+
+    await entry.vault.storage.deleteNote(id);
+    const files = vaultChanges.get(entry.vault) ?? [];
+    files.push(vaultManager.noteRelPath(entry.vault, id));
+    vaultChanges.set(entry.vault, files);
+  }
+
+  // Commit changes per vault
+  for (const [vault, files] of vaultChanges) {
+    await vault.git.commit(`prune: removed ${files.length} superseded note(s)`, files);
+    await vault.git.push();
+  }
+
+  lines.push("");
+  lines.push(`Pruned ${supersededIds.size} note(s).`);
+
+  return { content: [{ type: "text", text: lines.join("\n") }] };
+}
+
+async function dryRunAll(
+  entries: NoteEntry[],
+  threshold: number,
+  consolidationMode: ConsolidationMode,
+  project: Awaited<ReturnType<typeof resolveProject>>,
+): Promise<{ content: Array<{ type: "text"; text: string }> }> {
+  const lines: string[] = [];
+  lines.push(`Consolidation analysis for ${project?.name ?? "global"}:`);
+  lines.push(`Mode: ${consolidationMode} | Threshold: ${threshold}`);
+  lines.push("");
+
+  // Run all analysis strategies
+  const dupes = await detectDuplicates(entries, threshold, project);
+  lines.push("=== DUPLICATE DETECTION ===");
+  lines.push(dupes.content[0]?.text ?? "No output");
+  lines.push("");
+
+  const clusters = findClusters(entries, project);
+  lines.push("=== CLUSTER ANALYSIS ===");
+  lines.push(clusters.content[0]?.text ?? "No output");
+  lines.push("");
+
+  const merges = await suggestMerges(entries, threshold, consolidationMode, project);
+  lines.push("=== MERGE SUGGESTIONS ===");
+  lines.push(merges.content[0]?.text ?? "No output");
+
+  return { content: [{ type: "text", text: lines.join("\n") }] };
+}
 
 // ── start ─────────────────────────────────────────────────────────────────────
 const transport = new StdioServerTransport();

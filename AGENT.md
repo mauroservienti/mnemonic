@@ -18,6 +18,25 @@ When implementing a new feature or behavior in mnemonic itself, dogfood the loca
 - Mnemoize important implementation decisions, tradeoffs, and debugging findings through the MCP server so future agents can recall them.
 - **Never fall back to direct file writes when in dogfooding mode.** If the MCP tool call fails, troubleshoot the tool or use `scripts/mcp-local.sh` directly rather than bypassing the server.
 
+### Dogfooding troubleshooting
+
+**Complex JSON payloads failing silently:** When sending multiline content or special characters via stdio, shell escaping can corrupt the JSON. Write payloads to a temp file first, then pipe to the MCP server:
+
+```bash
+# Write request to file
+cat > /tmp/request.json << 'JSON'
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{...}}
+JSON
+
+# Pipe to MCP
+(
+  echo '{"jsonrpc":"2.0","id":0,"method":"initialize",...}'
+  cat /tmp/request.json
+) | ./scripts/mcp-local.sh
+```
+
+**Verify the result:** Always confirm notes were created by running `recent_memories` or `list` after `remember`. Truncated responses don't mean failure.
+
 ## Design decisions and rationale
 
 ### Markdown + YAML frontmatter as storage
