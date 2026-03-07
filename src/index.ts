@@ -10,9 +10,9 @@ import { Storage, type Note, type RelationshipType } from "./storage.js";
 import { embed, cosineSimilarity, embedModel } from "./embeddings.js";
 import { type SyncResult } from "./git.js";
 import { cleanMarkdown } from "./markdown.js";
+import { MnemonicConfigStore } from "./config.js";
 import {
   PROJECT_POLICY_SCOPES,
-  ProjectMemoryPolicyStore,
   WRITE_SCOPES,
   resolveWriteScope,
   type ProjectPolicyScope,
@@ -35,7 +35,8 @@ const DEFAULT_MIN_SIMILARITY = 0.3;
 
 const vaultManager = new VaultManager(VAULT_PATH);
 await vaultManager.initMain();
-const projectMemoryPolicies = new ProjectMemoryPolicyStore(VAULT_PATH);
+const configStore = new MnemonicConfigStore(VAULT_PATH);
+const config = await configStore.load();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -87,7 +88,7 @@ async function getProjectPolicyScope(cwd?: string): Promise<ProjectPolicyScope |
     return undefined;
   }
 
-  const policy = await projectMemoryPolicies.get(project.id);
+  const policy = await configStore.getProjectPolicy(project.id);
   return policy?.defaultScope;
 }
 
@@ -125,23 +126,39 @@ async function embedMissingNotes(
 
   let rebuilt = 0;
   const failed: string[] = [];
+  let index = 0;
 
-  for (const note of notes) {
-    const existing = await storage.readEmbedding(note.id);
-    if (existing) continue;
-    try {
-      const vector = await embed(`${note.title}\n\n${note.content}`);
-      await storage.writeEmbedding({
-        id: note.id,
-        model: embedModel,
-        embedding: vector,
-        updatedAt: new Date().toISOString(),
-      });
-      rebuilt++;
-    } catch {
-      failed.push(note.id);
+  const workerCount = Math.min(config.reindexEmbedConcurrency, Math.max(notes.length, 1));
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const note = notes[index++];
+      if (!note) {
+        return;
+      }
+
+      const existing = await storage.readEmbedding(note.id);
+      if (existing) {
+        continue;
+      }
+
+      try {
+        const vector = await embed(`${note.title}\n\n${note.content}`);
+        await storage.writeEmbedding({
+          id: note.id,
+          model: embedModel,
+          embedding: vector,
+          updatedAt: new Date().toISOString(),
+        });
+        rebuilt++;
+      } catch {
+        failed.push(note.id);
+      }
     }
-  }
+  });
+
+  await Promise.all(workers);
+
+  failed.sort();
 
   return { rebuilt, failed };
 }
@@ -249,7 +266,7 @@ async function formatProjectPolicyLine(projectId?: string): Promise<string> {
   if (!projectId) {
     return "Policy: none";
   }
-  const policy = await projectMemoryPolicies.get(projectId);
+  const policy = await configStore.getProjectPolicy(projectId);
   if (!policy) {
     return "Policy: none (fallback write scope with cwd is project)";
   }
@@ -402,7 +419,7 @@ server.registerTool(
     }
 
     const now = new Date().toISOString();
-    await projectMemoryPolicies.set({
+    await configStore.setProjectPolicy({
       projectId: project.id,
       projectName: project.name,
       defaultScope,
@@ -411,7 +428,7 @@ server.registerTool(
 
     await vaultManager.main.git.commit(
       `policy(${project.id}): default memory scope ${defaultScope}`,
-      ["project-memory-policies.json"]
+      ["config.json"]
     );
     await vaultManager.main.git.push();
 
@@ -440,7 +457,7 @@ server.registerTool(
       return { content: [{ type: "text", text: `Could not detect a project for: ${cwd}` }] };
     }
 
-    const policy = await projectMemoryPolicies.get(project.id);
+    const policy = await configStore.getProjectPolicy(project.id);
     if (!policy) {
       return {
         content: [{

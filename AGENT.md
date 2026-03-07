@@ -66,6 +66,9 @@ Routing rules:
 
 The main vault's own git repo is excluded from project-vault detection (`isMainRepo()` guard) so mnemonic's own directory is never treated as a project vault.
 
+### Main vault config
+Machine-local runtime settings live in the main vault's `config.json`. Use this for operational tuning and persistent MCP behavior that should survive across sessions without becoming a memory note. This includes `reindexEmbedConcurrency` and per-project memory policy defaults.
+
 ### Bidirectional sync with auto-embedding
 `sync` does: fetch → record local HEAD → pull (rebase) → diff `notes/` to find what changed → push → embed any notes that arrived. This is a single tool call that handles the full sync cycle. Rebase is used instead of merge to keep history linear. `sync` always syncs the main vault; pass `cwd` to also sync the project vault.
 
@@ -242,7 +245,7 @@ We switched from HS256 to RS256 because...
 
 ## Known limitations and future work
 
-- **Sequential embedding on reindex** — `embedMissingNotes()` embeds one note at a time. For large vaults this could be parallelized with a concurrency limit.
+- **Bounded parallel embedding on reindex** — `embedMissingNotes()` runs with a small concurrency limit to speed up large reindexes without flooding Ollama. Increase carefully if local embedding throughput becomes a bottleneck.
 - **No full-text fallback** — if Ollama is down, `recall` fails entirely. A fallback to simple keyword search over note content would improve resilience.
 - **Embedding model mismatch** — if you change `EMBED_MODEL`, existing embeddings are stale. `reindex --force` fixes this but there's no automatic detection. Could check `EmbeddingRecord.model` against current model and re-embed mismatches.
 - **No web UI** — memorizer has one. Out of scope for this project; the vault is just files so any markdown editor works for browsing.

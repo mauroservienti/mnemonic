@@ -48,6 +48,8 @@ Notes are plain markdown with YAML frontmatter — readable, diffable, mergeable
 Memory content is markdown-linted on `remember`/`update`: fixable issues are auto-corrected before save, and non-fixable issues are rejected.
 Embeddings stay local (gitignored) and are rebuilt on each machine with `reindex`.
 
+Main-vault runtime settings live in `~/mnemonic-vault/config.json`. This now holds both machine-local runtime tuning and per-project memory policies. Today it includes `reindexEmbedConcurrency`, which defaults to `4` and is clamped to the range `1..16`.
+
 ## Project scoping
 
 Project identity is derived from the **git remote URL** of the working directory, normalized to a stable slug (e.g. `github-com-acme-myapp`). This means the same project is recognized consistently across machines, regardless of local clone paths.

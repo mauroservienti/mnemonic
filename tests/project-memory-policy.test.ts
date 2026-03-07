@@ -3,7 +3,8 @@ import os from "os";
 import path from "path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { ProjectMemoryPolicyStore, resolveWriteScope } from "../src/project-memory-policy.js";
+import { MnemonicConfigStore } from "../src/config.js";
+import { resolveWriteScope } from "../src/project-memory-policy.js";
 
 const tempDirs: string[] = [];
 
@@ -33,21 +34,21 @@ describe("resolveWriteScope", () => {
   });
 });
 
-describe("ProjectMemoryPolicyStore", () => {
+describe("project memory policies in config", () => {
   it("persists and reloads project policies", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mnemonic-policy-"));
     tempDirs.push(dir);
 
-    const store = new ProjectMemoryPolicyStore(dir);
-    await store.set({
+    const store = new MnemonicConfigStore(dir);
+    await store.setProjectPolicy({
       projectId: "project-1",
       projectName: "Project One",
       defaultScope: "ask",
       updatedAt: "2026-03-07T00:00:00.000Z",
     });
 
-    const reloaded = new ProjectMemoryPolicyStore(dir);
-    await expect(reloaded.get("project-1")).resolves.toEqual({
+    const reloaded = new MnemonicConfigStore(dir);
+    await expect(reloaded.getProjectPolicy("project-1")).resolves.toEqual({
       projectId: "project-1",
       projectName: "Project One",
       defaultScope: "ask",
