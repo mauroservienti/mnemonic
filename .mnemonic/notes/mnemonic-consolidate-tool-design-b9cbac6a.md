@@ -1,0 +1,45 @@
+---
+title: mnemonic consolidate tool design
+tags:
+  - design
+  - consolidation
+  - mcp-tool
+  - architecture
+createdAt: '2026-03-07T23:15:43.251Z'
+updatedAt: '2026-03-07T23:15:43.251Z'
+project: https-github-com-danielmarbach-mnemonic
+projectName: mnemonic
+---
+New MCP tool `consolidate` for memory consolidation with cross-vault support.
+
+**Purpose:** Analyze and consolidate memories by detecting duplicates, identifying clusters, and merging related notes while preserving relationships.
+
+**Strategies:**
+
+- `detect-duplicates` — Find semantically similar notes (>0.85 similarity)
+- `find-clusters` — Group notes by theme and relationship density
+- `suggest-merges` — Recommend specific merges with rationale
+- `execute-merge` — Perform consolidation with chosen mode
+- `prune-superseded` — Clean up superseded chains, keep only latest
+- `dry-run` — Preview all strategies without changes
+
+**Consolidation Modes:**
+
+- `supersedes` (default) — Keep sources, add `supersedes` relationship to new consolidated note. Preserves history with clear lineage. Can prune later with `prune-superseded`.
+- `delete` — Hard delete sources via `forget`. Clean immediate results, irreversible.
+
+**Cross-Vault Behavior:**
+
+- Gather ALL notes with matching project ID from both main vault and project vault
+- Consolidate into project vault (shared knowledge)
+- Apply same mode to all sources regardless of original vault
+- Consolidated note inherits all relationships from sources
+
+**Project Policy Extension:**
+Add `consolidationMode` to `ProjectMemoryPolicy` with default `supersedes`. Stored in main vault config.json.
+
+**Safety Features:**
+
+- Dry-run by default for analysis strategies
+- Git commit per operation for easy revert
+- Shows exactly what will happen before changes
