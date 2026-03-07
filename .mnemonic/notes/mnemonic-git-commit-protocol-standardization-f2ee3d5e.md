@@ -7,54 +7,68 @@ tags:
   - mcp-tools
   - documentation
   - enhancement
+  - llm
 createdAt: '2026-03-07T23:34:04.303Z'
-updatedAt: '2026-03-07T23:40:38.110Z'
+updatedAt: '2026-03-07T23:47:05.420Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
 relatedTo:
   - id: mnemonic-key-design-decisions-3f2a6273
     type: related-to
 ---
-Enhanced git commit protocol with human-readable summaries for better traceability and readability.
+Enhanced git commit protocol with human-readable summaries for better traceability and readability. Now includes LLM-provided summary support for optimal commit messages.
 
-**Improvements:**
+**Key Enhancement - LLM-Provided Summaries:**
 
-1. **Added `extractSummary()` helper function** (lines 122-140 in src/index.ts):
-   - Extracts first sentence or first 100 chars of content
-   - Provides human-readable context like a good commit message should
+The `remember` tool now accepts an optional `summary` parameter that allows LLMs to provide concise, commit-message-style summaries directly. This is the preferred approach over automatic extraction.
 
-2. **Added `summary` field to `CommitBodyOptions`** (lines 143):
-   - Human-readable summary appears first in commit body
-   - Structured metadata follows after blank line
-   - Format matches conventional commit best practices
+**How it works:**
 
-3. **Updated all commit call sites to include summaries:**
-   - `remember`: Extracts summary from note content (first sentence)
-   - `update`: Shows what changed ("Updated title, content, tags")
-   - `forget`: Shows cleanup impact ("Deleted note and cleaned up N reference(s)")
-   - `move`: Shows vault transition ("Moved from X-vault to Y-vault")
-   - All tools now include both summary and structured metadata
+1. LLM calls `remember` with both `content` and `summary` parameters
+2. Summary appears first in git commit body (like a good commit message)
+3. Full content stored in note file as usual
+4. If no summary provided, falls back to first sentence extraction
 
-**Updated AGENT.md documentation:**
+**Benefits:**
 
-- Documented `Summary` field as required first line
-- Updated format specification with human-readable example
-- Updated all tool-specific conventions tables
-- Added `extractSummary()` to implementation examples
+- LLM crafts optimal summary based on full context understanding
+- Follows conventional commit best practices (imperative mood, 50-72 chars)
+- Commit messages tell the story; note files contain full details
+- No extra AI calls needed in code (simpler, faster)
 
-**Example commit message format now:**
+**Example:**
 
-```text
-remember: JWT RS256 migration rationale
-
-Store decision to migrate from HS256 to RS256 for better security across distributed services.
-
-- Note: jwt-rs256-rationale-abc123 (JWT RS256 migration rationale)
-- Project: mnemonic
-- Scope: project
-- Tags: auth, jwt, security
+```typescript
+remember({
+  title: "JWT RS256 migration decision",
+  summary: "Document JWT RS256 migration for distributed auth",
+  content: "Full details about the migration..."
+})
 ```
 
-**Implementation:** Use `formatCommitBody({ summary, noteId, ... })` - summary appears first, metadata follows.
+**Results in commit:**
 
-All 26 tests passing. Build successful.
+```text
+remember: JWT RS256 migration decision
+
+Document JWT RS256 migration for distributed auth
+
+- Note: jwt-rs256-abc123 (JWT RS256 migration decision)
+- Project: mnemonic
+- Scope: project
+- Tags: auth, security
+```
+
+**Updated documentation:**
+
+- README.md: Added `summary` parameter guidance in system prompt
+- AGENT.md: Updated protocol with summary source guidance
+
+**Implementation:**
+
+- Added optional `summary` parameter to `remember` tool schema
+- Updated `formatCommitBody()` to accept LLM-provided summary
+- Fallback to `extractSummary()` if no summary provided
+- All 26 tests passing
+
+This approach is cleaner than code-side AI summarization because the LLM already understands the context when composing the note.
