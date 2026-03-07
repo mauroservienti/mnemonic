@@ -121,6 +121,31 @@ function formatNote(note: Note, score?: number): string {
 
 // ── Git commit message helpers ────────────────────────────────────────────────
 
+/**
+ * Extract a short human-readable summary from note content.
+ * Returns the first sentence or first 100 chars, whichever is shorter.
+ */
+function extractSummary(content: string, maxLength = 100): string {
+  // Normalize whitespace
+  const normalized = content.replace(/\s+/g, " ").trim();
+
+  // Try to find first sentence (ending with .!? followed by space or end)
+  const sentenceMatch = normalized.match(/^[^.!?]+[.!?]/);
+  if (sentenceMatch) {
+    const sentence = sentenceMatch[0].trim();
+    if (sentence.length <= maxLength) {
+      return sentence;
+    }
+  }
+
+  // Fallback: first maxLength chars
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return normalized.slice(0, maxLength - 3) + "...";
+}
+
 interface CommitBodyOptions {
   noteId?: string;
   noteTitle?: string;
@@ -132,12 +157,20 @@ interface CommitBodyOptions {
   relationship?: { fromId: string; toId: string; type: string };
   mode?: string;
   count?: number;
+  summary?: string;
   description?: string;
 }
 
 function formatCommitBody(options: CommitBodyOptions): string {
   const lines: string[] = [];
 
+  // Human-readable summary comes first (like a good commit message)
+  if (options.summary) {
+    lines.push(options.summary);
+    lines.push("");
+  }
+
+  // Structured metadata follows
   if (options.noteId && options.noteTitle) {
     lines.push(`- Note: ${options.noteId} (${options.noteTitle})`);
   }
@@ -364,19 +397,22 @@ async function moveNoteBetweenVaults(
 
   await sourceVault.storage.deleteNote(note.id);
 
+  const sourceVaultLabel = sourceVault.isProject ? "project-vault" : "main-vault";
+  const targetVaultLabel = targetVault.isProject ? "project-vault" : "main-vault";
+
   const targetCommitBody = formatCommitBody({
+    summary: `Moved from ${sourceVaultLabel} to ${targetVaultLabel}`,
     noteId: note.id,
     noteTitle: note.title,
     projectName: note.projectName,
-    description: `Moved from ${sourceVault.isProject ? "project-vault" : "main-vault"} to ${targetVault.isProject ? "project-vault" : "main-vault"}`,
   });
   await targetVault.git.commit(`move: ${note.title}`, [vaultManager.noteRelPath(targetVault, note.id)], targetCommitBody);
 
   const sourceCommitBody = formatCommitBody({
+    summary: `Moved to ${targetVaultLabel}`,
     noteId: note.id,
     noteTitle: note.title,
     projectName: note.projectName,
-    description: `Moved to ${targetVault.isProject ? "project-vault" : "main-vault"}`,
   });
   await sourceVault.git.commit(`move: ${note.title}`, [vaultManager.noteRelPath(sourceVault, note.id)], sourceCommitBody);
   await targetVault.git.push();
@@ -438,6 +474,7 @@ server.registerTool(
       title: z.string().describe("Short descriptive title"),
       content: z.string().describe("The content to remember (markdown supported)"),
       tags: z.array(z.string()).optional().default([]).describe("Optional tags"),
+      summary: z.string().optional().describe("Brief summary for git commit message (like a good commit message, describing the change). Not stored in the note."),
       cwd: projectParam,
       scope: z
         .enum(WRITE_SCOPES)
@@ -445,7 +482,7 @@ server.registerTool(
         .describe("Where to store the memory: project vault or private global vault"),
     }),
   },
-  async ({ title, content, tags, cwd, scope }) => {
+  async ({ title, content, tags, summary, cwd, scope }) => {
     const project = await resolveProject(cwd);
     const cleanedContent = await cleanMarkdown(content);
     const policyScope = await getProjectPolicyScope(cwd);
@@ -476,7 +513,9 @@ server.registerTool(
     }
 
     const projectScope = describeProject(project);
+    const commitSummary = summary ?? extractSummary(cleanedContent);
     const commitBody = formatCommitBody({
+      summary: commitSummary,
       noteId: id,
       noteTitle: title,
       projectName: project?.name,
@@ -682,10 +721,11 @@ server.registerTool(
       content: z.string().optional(),
       title: z.string().optional(),
       tags: z.array(z.string()).optional(),
+      summary: z.string().optional().describe("Brief summary of what changed and why (for git commit message). Not stored in the note."),
       cwd: projectParam,
     }),
   },
-  async ({ id, content, title, tags, cwd }) => {
+  async ({ id, content, title, tags, summary, cwd }) => {
     const found = await vaultManager.findNote(id, cwd);
     if (!found) {
       return { content: [{ type: "text", text: `No memory found with id '${id}'` }] };
@@ -712,7 +752,16 @@ server.registerTool(
       console.error(`[embedding] Re-embed failed for '${id}': ${err}`);
     }
 
+    // Build change summary (LLM-provided or auto-generated)
+    const changes: string[] = [];
+    if (title !== undefined && title !== note.title) changes.push("title");
+    if (content !== undefined) changes.push("content");
+    if (tags !== undefined) changes.push("tags");
+    const changeDesc = changes.length > 0 ? `Updated ${changes.join(", ")}` : "No changes";
+    const commitSummary = summary ?? changeDesc;
+
     const commitBody = formatCommitBody({
+      summary: commitSummary,
       noteId: id,
       noteTitle: updated.title,
       projectName: updated.projectName,
@@ -766,14 +815,13 @@ server.registerTool(
 
     for (const [v, files] of vaultChanges) {
       const isPrimaryVault = v === noteVault;
-      const commitBody = isPrimaryVault
-        ? formatCommitBody({
-            noteId: id,
-            noteTitle: note.title,
-            projectName: note.projectName,
-            description: isPrimaryVault ? `Deleted note and cleaned up ${files.length - 1} reference(s)` : undefined,
-          })
-        : undefined;
+      const summary = isPrimaryVault ? `Deleted note and cleaned up ${files.length - 1} reference(s)` : "Cleaned up dangling reference";
+      const commitBody = formatCommitBody({
+        summary,
+        noteId: id,
+        noteTitle: note.title,
+        projectName: note.projectName,
+      });
       await v.git.commit(`forget: ${note.title}`, files, commitBody);
       await v.git.push();
     }
@@ -1370,7 +1418,8 @@ server.registerTool(
         .object({
           sourceIds: z.array(z.string()).min(2).describe("Notes to merge into a single consolidated note"),
           targetTitle: z.string().describe("Title for the consolidated note"),
-          description: z.string().optional().describe("Optional context explaining the consolidation"),
+          description: z.string().optional().describe("Optional context explaining the consolidation (stored in note)"),
+          summary: z.string().optional().describe("Brief summary of merge rationale (for git commit message only)"),
           tags: z.array(z.string()).optional().describe("Tags for the consolidated note (defaults to union of source tags)"),
         })
         .optional()
@@ -1630,12 +1679,12 @@ async function suggestMerges(
 
 async function executeMerge(
   entries: NoteEntry[],
-  mergePlan: { sourceIds: string[]; targetTitle: string; description?: string; tags?: string[] },
+  mergePlan: { sourceIds: string[]; targetTitle: string; description?: string; summary?: string; tags?: string[] },
   consolidationMode: ConsolidationMode,
   project: Awaited<ReturnType<typeof resolveProject>>,
   cwd?: string,
 ): Promise<{ content: Array<{ type: "text"; text: string }> }> {
-  const { sourceIds, targetTitle, description, tags } = mergePlan;
+  const { sourceIds, targetTitle, description, summary, tags } = mergePlan;
 
   // Find all source entries
   const sourceEntries: NoteEntry[] = [];
@@ -1748,18 +1797,21 @@ async function executeMerge(
   for (const [vault, files] of vaultChanges) {
     const isTargetVault = vault === targetVault;
     const action = consolidationMode === "delete" ? "consolidate(delete)" : "consolidate(supersedes)";
+    const defaultSummary = `Consolidated ${sourceIds.length} notes into new note`;
+    const commitSummary = isTargetVault ? (summary ?? defaultSummary) : (consolidationMode === "delete" ? "Deleted as part of consolidation" : "Marked as superseded by consolidation");
     const commitBody = isTargetVault
       ? formatCommitBody({
+          summary: commitSummary,
           noteId: targetId,
           noteTitle: targetTitle,
           projectName: project?.name,
           mode: consolidationMode,
           noteIds: sourceIds,
-          description: `Consolidated ${sourceIds.length} notes into new note\nSources: ${sourceIds.join(", ")}`,
+          description: `Sources: ${sourceIds.join(", ")}`,
         })
       : formatCommitBody({
+          summary: commitSummary,
           noteIds: files.map((f) => f.replace(/\.mnemonic\/notes\/(.+)\.md$/, "$1").replace(/notes\/(.+)\.md$/, "$1")),
-          description: consolidationMode === "delete" ? "Deleted as part of consolidation" : "Marked as superseded by consolidation",
         });
     await vault.git.commit(`${action}: ${targetTitle}`, files, commitBody);
     await vault.git.push();
