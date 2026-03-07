@@ -6,7 +6,7 @@ tags:
   - mcp
   - typescript
 createdAt: '2026-03-07T17:58:49.005Z'
-updatedAt: '2026-03-07T18:37:17.293Z'
+updatedAt: '2026-03-07T19:11:55.546Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
 relatedTo:
@@ -25,6 +25,8 @@ A personal MCP memory server backed by plain markdown + JSON files, synced via g
 
 **Vault location:** `~/mnemonic-vault` by default (env: `VAULT_PATH`). One `.md` file per note, embeddings in `embeddings/` (gitignored — local only).
 
-**Entry point:** `build/index.js` (compiled from `index.ts`). Run via `node build/index.js`.
+**Repository layout:** runtime code lives in `src/`, compiled output goes to `build/`.
+
+**Entry point:** `build/index.js` (compiled from `src/index.ts`). Run via `node build/index.js`.
 
 **Inspired by:** petabridge/memorizer but without Postgres/pgvector.
