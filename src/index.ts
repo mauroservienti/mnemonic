@@ -1655,7 +1655,19 @@ async function suggestMerges(
         const simStr = src.note.id === entryA.note.id ? "" : ` (${similar.find((s) => s.entry.note.id === src.note.id)?.similarity.toFixed(3)})`;
         lines.push(`     - ${src.note.title} (${src.note.id})${simStr}`);
       }
-      lines.push(`   Mode: ${consolidationMode} (${consolidationMode === "supersedes" ? "preserves history" : "removes sources"})`);
+      const modeDescription = ((): string => {
+        switch (consolidationMode) {
+          case "supersedes":
+            return "preserves history";
+          case "delete":
+            return "removes sources";
+          default: {
+            const _exhaustive: never = consolidationMode;
+            return _exhaustive;
+          }
+        }
+      })();
+      lines.push(`   Mode: ${consolidationMode} (${modeDescription})`);
       lines.push("   To execute:");
       lines.push(`     consolidate({ strategy: "execute-merge", mergePlan: {`);
       lines.push(`       sourceIds: [${sources.map((s) => `"${s.note.id}"`).join(", ")}],`);
@@ -1762,29 +1774,38 @@ async function executeMerge(
   const vaultChanges = new Map<Vault, string[]>();
 
   // Handle sources based on consolidation mode
-  if (consolidationMode === "delete") {
-    // Delete all sources
-    for (const entry of sourceEntries) {
-      await entry.vault.storage.deleteNote(entry.note.id);
-      const files = vaultChanges.get(entry.vault) ?? [];
-      files.push(vaultManager.noteRelPath(entry.vault, entry.note.id));
-      vaultChanges.set(entry.vault, files);
-    }
-  } else {
-    // supersedes mode: mark sources with supersedes relationship
-    for (const entry of sourceEntries) {
-      const updatedRels = [...(entry.note.relatedTo ?? [])];
-      if (!updatedRels.some((r) => r.id === targetId)) {
-        updatedRels.push({ id: targetId, type: "supersedes" });
+  switch (consolidationMode) {
+    case "delete": {
+      // Delete all sources
+      for (const entry of sourceEntries) {
+        await entry.vault.storage.deleteNote(entry.note.id);
+        const files = vaultChanges.get(entry.vault) ?? [];
+        files.push(vaultManager.noteRelPath(entry.vault, entry.note.id));
+        vaultChanges.set(entry.vault, files);
       }
-      await entry.vault.storage.writeNote({
-        ...entry.note,
-        relatedTo: updatedRels,
-        updatedAt: now,
-      });
-      const files = vaultChanges.get(entry.vault) ?? [];
-      files.push(vaultManager.noteRelPath(entry.vault, entry.note.id));
-      vaultChanges.set(entry.vault, files);
+      break;
+    }
+    case "supersedes": {
+      // Mark sources with supersedes relationship
+      for (const entry of sourceEntries) {
+        const updatedRels = [...(entry.note.relatedTo ?? [])];
+        if (!updatedRels.some((r) => r.id === targetId)) {
+          updatedRels.push({ id: targetId, type: "supersedes" });
+        }
+        await entry.vault.storage.writeNote({
+          ...entry.note,
+          relatedTo: updatedRels,
+          updatedAt: now,
+        });
+        const files = vaultChanges.get(entry.vault) ?? [];
+        files.push(vaultManager.noteRelPath(entry.vault, entry.note.id));
+        vaultChanges.set(entry.vault, files);
+      }
+      break;
+    }
+    default: {
+      const _exhaustive: never = consolidationMode;
+      throw new Error(`Unknown consolidation mode: ${_exhaustive}`);
     }
   }
 
@@ -1796,9 +1817,27 @@ async function executeMerge(
   // Commit changes per vault
   for (const [vault, files] of vaultChanges) {
     const isTargetVault = vault === targetVault;
-    const action = consolidationMode === "delete" ? "consolidate(delete)" : "consolidate(supersedes)";
+
+    // Determine action and summary based on mode
+    let action: string;
+    let sourceSummary: string;
+    switch (consolidationMode) {
+      case "delete":
+        action = "consolidate(delete)";
+        sourceSummary = "Deleted as part of consolidation";
+        break;
+      case "supersedes":
+        action = "consolidate(supersedes)";
+        sourceSummary = "Marked as superseded by consolidation";
+        break;
+      default: {
+        const _exhaustive: never = consolidationMode;
+        throw new Error(`Unknown consolidation mode: ${_exhaustive}`);
+      }
+    }
+
     const defaultSummary = `Consolidated ${sourceIds.length} notes into new note`;
-    const commitSummary = isTargetVault ? (summary ?? defaultSummary) : (consolidationMode === "delete" ? "Deleted as part of consolidation" : "Marked as superseded by consolidation");
+    const commitSummary = isTargetVault ? (summary ?? defaultSummary) : sourceSummary;
     const commitBody = isTargetVault
       ? formatCommitBody({
           summary: commitSummary,
@@ -1821,11 +1860,19 @@ async function executeMerge(
   lines.push(`Consolidated ${sourceIds.length} notes into '${targetId}'`);
   lines.push(`Mode: ${consolidationMode}`);
   lines.push(`Stored in: ${targetVault.isProject ? "project-vault" : "main-vault"}`);
-  if (consolidationMode === "supersedes") {
-    lines.push("Sources preserved with 'supersedes' relationship.");
-    lines.push("Use 'prune-superseded' later to clean up if desired.");
-  } else {
-    lines.push("Source notes deleted.");
+
+  switch (consolidationMode) {
+    case "supersedes":
+      lines.push("Sources preserved with 'supersedes' relationship.");
+      lines.push("Use 'prune-superseded' later to clean up if desired.");
+      break;
+    case "delete":
+      lines.push("Source notes deleted.");
+      break;
+    default: {
+      const _exhaustive: never = consolidationMode;
+      throw new Error(`Unknown consolidation mode: ${_exhaustive}`);
+    }
   }
 
   return { content: [{ type: "text", text: lines.join("\n") }] };

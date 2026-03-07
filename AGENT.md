@@ -342,6 +342,89 @@ We switched from HS256 to RS256 because...
 - **zod** — MCP tool input schema validation
 - **Ollama** (external, HTTP) — local embeddings via `nomic-embed-text`
 
+## TypeScript type safety patterns
+
+Use TypeScript's type system to catch errors at compile time and guide refactoring. Prefer patterns that let the compiler verify exhaustiveness.
+
+### Exhaustive switch statements
+
+When branching on union types, use `switch` with exhaustiveness checking. This ensures all cases are handled and causes compile errors when new union members are added.
+
+**Preferred:**
+```typescript
+switch (consolidationMode) {
+  case "delete":
+    // handle delete
+    break;
+  case "supersedes":
+    // handle supersedes
+    break;
+  default: {
+    const _exhaustive: never = consolidationMode;
+    throw new Error(`Unknown mode: ${_exhaustive}`);
+  }
+}
+```
+
+**Avoid:**
+```typescript
+if (consolidationMode === "delete") {
+  // handle delete
+} else {
+  // Implicitly handles "supersedes" - no compiler verification
+}
+```
+
+The `const _exhaustive: never` pattern forces TypeScript to verify all union members are handled. If a new mode is added to `ConsolidationMode`, the compiler will error until the switch is updated.
+
+### String literal unions vs enums
+
+Use string literal unions for domain values. They're more lightweight and integrate better with object literals and JSON.
+
+**Preferred:**
+```typescript
+type ConsolidationMode = "supersedes" | "delete";
+type RelationshipType = "related-to" | "explains" | "example-of" | "supersedes";
+```
+
+**Avoid:**
+```typescript
+enum ConsolidationMode {
+  Supersedes = "supersedes",
+  Delete = "delete"
+}
+```
+
+### Type inference vs explicit types
+
+Let TypeScript infer types when obvious, add explicit types for function boundaries and public APIs.
+
+**Preferred:**
+```typescript
+// Inference is fine here
+const lines: string[] = [];
+lines.push("item");
+
+// Explicit types for function boundaries
+function processMode(mode: ConsolidationMode): string {
+  // ...
+}
+```
+
+### Unknown type for dynamic data
+
+Use `unknown` instead of `any` when receiving data from external sources (APIs, user input). It forces type checking before use.
+
+**Preferred:**
+```typescript
+function processConfig(raw: unknown): Config {
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error("Invalid config");
+  }
+  // ...
+}
+```
+
 ## Things not to change without good reason
 
 - **One file per note** — critical for git conflict isolation. Don't aggregate notes into a single file.
