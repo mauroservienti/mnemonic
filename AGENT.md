@@ -80,6 +80,14 @@ Output rules:
 - Keep lists shallow and grouped by purpose; avoid dumping raw note bodies unless the tool is explicitly for retrieval.
 - Only add structured/non-text responses if repeated LLM failures show that text is insufficient for a specific tool.
 
+Token-efficiency rules:
+- Optimize for clarity first, token use second.
+- Keep default responses concise; make extra detail opt-in.
+- Prefer one good summary tool over forcing multiple smaller calls.
+- Avoid repeating the same metadata in multiple sections when one summary line is enough.
+- Compress counts and state into a single line when it stays readable.
+- Do not shorten labels so much that `project`, `stored`, or `policy` become ambiguous.
+
 Formatting rules:
 - Use short headings or lead lines for orientation tools.
 - Use bullets for enumerations and state summaries.

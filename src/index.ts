@@ -799,16 +799,16 @@ server.registerTool(
     }
 
     const themeOrder = ["overview", "decisions", "tooling", "bugs", "architecture", "quality", "other"];
+    const projectVaultCount = entries.filter((entry) => entry.vault.isProject).length;
+    const mainVaultCount = entries.length - projectVaultCount;
     const sections: string[] = [];
-    sections.push(`Project memory summary for **${project.name}**`);
+    sections.push(`Project summary: **${project.name}**`);
     sections.push(`- id: \`${project.id}\``);
-    sections.push(`- ${policyLine}`);
-    sections.push(`- memories: ${entries.length}`);
-    sections.push(`- stored in project vault: ${entries.filter((entry) => entry.vault.isProject).length}`);
-    sections.push(`- stored in main vault: ${entries.filter((entry) => !entry.vault.isProject).length}`);
+    sections.push(`- ${policyLine.replace(/^Policy:\s*/, "policy: ")}`);
+    sections.push(`- memories: ${entries.length} (project-vault: ${projectVaultCount}, main-vault: ${mainVaultCount})`);
     const mainVaultProjectEntries = entries.filter((entry) => !entry.vault.isProject && entry.note.project === project.id);
     if (mainVaultProjectEntries.length > 0) {
-      sections.push(`- private project memories in main vault: ${mainVaultProjectEntries.length}`);
+      sections.push(`- private project memories: ${mainVaultProjectEntries.length}`);
     }
 
     for (const theme of themeOrder) {
@@ -824,7 +824,7 @@ server.registerTool(
     const recent = [...entries]
       .sort((a, b) => b.note.updatedAt.localeCompare(a.note.updatedAt))
       .slice(0, recentLimit);
-    sections.push(`\nRecent changes:`);
+    sections.push(`\nRecent:`);
     sections.push(...recent.map((entry) => `- ${entry.note.updatedAt} — ${entry.note.title}`));
 
     return { content: [{ type: "text", text: sections.join("\n") }] };
