@@ -72,7 +72,7 @@ describe("Storage", () => {
       expect(read).toBeTruthy();
       expect(read!.id).toBe(oldNote.id);
       expect(read!.title).toBe(oldNote.title);
-      expect(read!.memoryVersion).toBeUndefined(); // Should handle gracefully
+      expect(read!.memoryVersion).toBe(0); // Legacy notes normalize to pre-v0.2.0 schema
     });
 
     it("should return null for non-existent note", async () => {
@@ -235,7 +235,13 @@ describe("Storage", () => {
       await storage.writeNote(updated);
       const read = await storage.readNote(note.id);
 
-      expect(read).toEqual(updated);
+      expect(read).toEqual({
+        ...updated,
+        memoryVersion: 0,
+        project: undefined,
+        projectName: undefined,
+        relatedTo: undefined,
+      });
     });
   });
 

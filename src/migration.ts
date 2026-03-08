@@ -32,6 +32,7 @@ export interface Migration {
 
 export class Migrator {
   private migrations: Map<string, Migration> = new Map();
+  private vaultLocks = new Map<string, Promise<void>>();
 
   constructor(private vaultManager: VaultManager) {
     this.registerBuiltInMigrations();
@@ -115,21 +116,42 @@ export class Migrator {
     const results = new Map<string, MigrationResult>();
 
     for (const vault of vaults) {
-      const result = await this.runMigrationAtomically(vault, migration, options.dryRun);
-      results.set(vault.storage.vaultPath, result);
+      const result = await this.withVaultLock(vault.storage.vaultPath, async () => {
+        const migrationResult = await this.runMigrationAtomically(vault, migration, options.dryRun);
 
-      if (!options.dryRun && result.notesModified > 0 && result.errors.length === 0) {
-        const files = result.modifiedNoteIds.map(id => `${vault.notesRelDir}/${id}.md`);
-        const commitMessage = `migrate: ${migrationName}\n\n- Modified: ${result.notesModified} note(s)\n- Processed: ${result.notesProcessed} note(s)`;
+        if (!options.dryRun && migrationResult.errors.length === 0) {
+          const currentSchemaVersion = await readVaultSchemaVersion(vault.storage.vaultPath);
+          const nextSchemaVersion = this.getLatestSchemaVersion(currentSchemaVersion, [migration]);
+          const filesToCommit = new Set(migrationResult.modifiedNoteIds.map((id) => `${vault.notesRelDir}/${id}.md`));
 
-        try {
-          await vault.git.commit(commitMessage, files);
-          await vault.git.push();
-        } catch (err) {
-          console.error(`[migration] Failed to commit for ${vault.storage.vaultPath}: ${err}`);
-          result.warnings.push(`Auto-commit failed: ${err instanceof Error ? err.message : String(err)}`);
+          if (nextSchemaVersion !== currentSchemaVersion) {
+            await writeVaultSchemaVersion(vault.storage.vaultPath, nextSchemaVersion);
+            filesToCommit.add(getConfigPathForVault(vault));
+          }
+
+          if (filesToCommit.size > 0) {
+            const commitMessage = [
+              `migrate: ${migrationName}`,
+              "",
+              `- Modified: ${migrationResult.notesModified} note(s)`,
+              `- Processed: ${migrationResult.notesProcessed} note(s)`,
+              `- Schema: ${currentSchemaVersion} -> ${nextSchemaVersion}`,
+            ].join("\n");
+
+            try {
+              await vault.git.commit(commitMessage, [...filesToCommit]);
+              await vault.git.push();
+            } catch (err) {
+              console.error(`[migration] Failed to commit for ${vault.storage.vaultPath}: ${err}`);
+              migrationResult.warnings.push(`Auto-commit failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
         }
-      }
+
+        return migrationResult;
+      });
+
+      results.set(vault.storage.vaultPath, result);
     }
 
     return { results, vaultsProcessed: vaults.length };
@@ -150,82 +172,88 @@ export class Migrator {
     const migrationResults = new Map<string, { migration: string; result: MigrationResult }[]>();
 
     for (const vault of vaults) {
-      const vaultVersion = await readVaultSchemaVersion(vault.storage.vaultPath);
-      const pending = await this.getPendingMigrations(vaultVersion);
-      if (pending.length === 0) continue;
+      const vaultResults = await this.withVaultLock(vault.storage.vaultPath, async () => {
+        const vaultVersion = await readVaultSchemaVersion(vault.storage.vaultPath);
+        const pending = await this.getPendingMigrations(vaultVersion);
+        if (pending.length === 0) return null;
 
-      const vaultResults: { migration: string; result: MigrationResult }[] = [];
-      const filesToCommit = new Set<string>();
-      let hasErrors = false;
-
-      if (!options.dryRun) {
-        await vault.storage.beginAtomicNotesWrite();
-      }
-
-      try {
-        for (const migration of pending) {
-          const result = await migration.run(vault, options.dryRun);
-          vaultResults.push({ migration: migration.name, result });
-
-          if (!options.dryRun && result.notesModified > 0) {
-            for (const noteId of result.modifiedNoteIds) {
-              filesToCommit.add(`${vault.notesRelDir}/${noteId}.md`);
-            }
-          }
-
-          if (result.errors.length > 0) hasErrors = true;
-        }
+        const lockedVaultResults: { migration: string; result: MigrationResult }[] = [];
+        const filesToCommit = new Set<string>();
+        let hasErrors = false;
 
         if (!options.dryRun) {
-          if (hasErrors) {
-            await vault.storage.rollbackAtomicNotesWrite();
-          } else {
-            await vault.storage.commitAtomicNotesWrite();
-          }
+          await vault.storage.beginAtomicNotesWrite();
         }
-      } catch (err) {
-        if (!options.dryRun) {
-          await vault.storage.rollbackAtomicNotesWrite();
-        }
-        throw err;
-      }
 
-      migrationResults.set(vault.storage.vaultPath, vaultResults);
+        try {
+          for (const migration of pending) {
+            const result = await migration.run(vault, options.dryRun);
+            lockedVaultResults.push({ migration: migration.name, result });
 
-      if (!options.dryRun && pending.length > 0) {
-        if (!hasErrors) {
-          const nextSchemaVersion = this.getLatestSchemaVersion(vaultVersion, pending);
-          if (nextSchemaVersion !== vaultVersion) {
-            await writeVaultSchemaVersion(vault.storage.vaultPath, nextSchemaVersion);
-            filesToCommit.add(getConfigPathForVault(vault));
-          }
-
-          if (filesToCommit.size > 0) {
-            const commitMessage = [
-              "migrate: apply pending migrations",
-              "",
-              `- Migrations: ${pending.map((migration) => migration.name).join(", ")}`,
-              `- Schema: ${vaultVersion} -> ${nextSchemaVersion}`,
-            ].join("\n");
-
-            try {
-              await vault.git.commit(commitMessage, [...filesToCommit]);
-              await vault.git.push();
-            } catch (err) {
-              const message = `Auto-commit failed: ${err instanceof Error ? err.message : String(err)}`;
-              console.error(`[migration] Failed to commit for ${vault.storage.vaultPath}: ${err}`);
-              for (const { result } of vaultResults) {
-                result.warnings.push(message);
+            if (!options.dryRun && result.notesModified > 0) {
+              for (const noteId of result.modifiedNoteIds) {
+                filesToCommit.add(`${vault.notesRelDir}/${noteId}.md`);
               }
             }
+
+            if (result.errors.length > 0) hasErrors = true;
           }
-        } else if (filesToCommit.size > 0) {
-          const warning = "Schema version not advanced because one or more migrations reported errors; staged note updates were rolled back.";
-          for (const { result } of vaultResults) {
-            result.warnings.push(warning);
+
+          if (!options.dryRun) {
+            if (hasErrors) {
+              await vault.storage.rollbackAtomicNotesWrite();
+            } else {
+              await vault.storage.commitAtomicNotesWrite();
+            }
           }
-          console.error(`[migration] ${vault.storage.vaultPath}: ${warning}`);
+        } catch (err) {
+          if (!options.dryRun) {
+            await vault.storage.rollbackAtomicNotesWrite();
+          }
+          throw err;
         }
+
+        if (!options.dryRun && pending.length > 0) {
+          if (!hasErrors) {
+            const nextSchemaVersion = this.getLatestSchemaVersion(vaultVersion, pending);
+            if (nextSchemaVersion !== vaultVersion) {
+              await writeVaultSchemaVersion(vault.storage.vaultPath, nextSchemaVersion);
+              filesToCommit.add(getConfigPathForVault(vault));
+            }
+
+            if (filesToCommit.size > 0) {
+              const commitMessage = [
+                "migrate: apply pending migrations",
+                "",
+                `- Migrations: ${pending.map((migration) => migration.name).join(", ")}`,
+                `- Schema: ${vaultVersion} -> ${nextSchemaVersion}`,
+              ].join("\n");
+
+              try {
+                await vault.git.commit(commitMessage, [...filesToCommit]);
+                await vault.git.push();
+              } catch (err) {
+                const message = `Auto-commit failed: ${err instanceof Error ? err.message : String(err)}`;
+                console.error(`[migration] Failed to commit for ${vault.storage.vaultPath}: ${err}`);
+                for (const { result } of lockedVaultResults) {
+                  result.warnings.push(message);
+                }
+              }
+            }
+          } else if (filesToCommit.size > 0) {
+            const warning = "Schema version not advanced because one or more migrations reported errors; staged note updates were rolled back.";
+            for (const { result } of lockedVaultResults) {
+              result.warnings.push(warning);
+            }
+            console.error(`[migration] ${vault.storage.vaultPath}: ${warning}`);
+          }
+        }
+
+        return lockedVaultResults;
+      });
+
+      if (vaultResults) {
+        migrationResults.set(vault.storage.vaultPath, vaultResults);
       }
     }
 
@@ -268,6 +296,27 @@ export class Migrator {
     }
 
     return latest;
+  }
+
+  private async withVaultLock<T>(vaultPath: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.vaultLocks.get(vaultPath) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => gate);
+    this.vaultLocks.set(vaultPath, tail);
+
+    await previous;
+
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (this.vaultLocks.get(vaultPath) === tail) {
+        this.vaultLocks.delete(vaultPath);
+      }
+    }
   }
 
   private async runMigrationAtomically(vault: Vault, migration: Migration, dryRun: boolean): Promise<MigrationResult> {

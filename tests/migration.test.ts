@@ -525,7 +525,66 @@ Second note`,
     });
 
     it("recovers cleanly after an interrupted run and succeeds on retry", async () => {
-      const firstResult = await migrator.runMigration("add-memory-version-field", {
+      await fs.writeFile(
+        path.join(tempDir, "notes", "note-1.md"),
+        `---
+title: Note 1
+tags: []
+createdAt: 2026-01-01T00:00:00.000Z
+updatedAt: 2026-01-01T00:00:00.000Z
+memoryVersion: 1
+---
+
+Original content`,
+        "utf-8",
+      );
+      await fs.writeFile(
+        path.join(tempDir, "notes", "note-2.md"),
+        `---
+title: Note 2
+tags: []
+createdAt: 2026-01-01T00:00:00.000Z
+updatedAt: 2026-01-01T00:00:00.000Z
+memoryVersion: 1
+---
+
+Broken content`,
+        "utf-8",
+      );
+
+      migrator.registerMigration({
+        name: "retryable-fixup",
+        description: "Updates note-1 but blocks on unfixed note-2",
+        minSchemaVersion: "0.0",
+        maxSchemaVersion: "2.0",
+        async run(vault: Vault) {
+          const notes = await vault.storage.listNotes();
+          const result = {
+            notesProcessed: notes.length,
+            notesModified: 0,
+            modifiedNoteIds: [] as string[],
+            errors: [] as Array<{ noteId: string; error: string }>,
+            warnings: [] as string[],
+          };
+
+          const first = notes.find((note) => note.id === "note-1");
+          const second = notes.find((note) => note.id === "note-2");
+
+          if (first && !first.content.includes("Updated by retryable migration.")) {
+            await vault.storage.writeNote({ ...first, content: `${first.content}\n\nUpdated by retryable migration.` });
+            result.notesModified++;
+            result.modifiedNoteIds.push(first.id);
+          }
+
+          if (second?.content !== "Fixed content") {
+            result.errors.push({ noteId: "note-2", error: "Test error for note-2" });
+          }
+
+          return result;
+        },
+      });
+
+      const firstResult = await migrator.runMigration("retryable-fixup", {
         dryRun: false,
         backup: false,
       });
@@ -549,20 +608,20 @@ Second note`,
       });
 
       // Retry should succeed
-      const retryResult = await migrator.runMigration("add-memory-version-field", {
+      const retryResult = await migrator.runMigration("retryable-fixup", {
         dryRun: false,
         backup: false,
       });
 
       expect(retryResult.results.get(storage.vaultPath)?.errors).toEqual([]);
-      expect(retryResult.results.get(storage.vaultPath)?.notesModified).toBe(2);
+      expect(retryResult.results.get(storage.vaultPath)?.notesModified).toBe(1);
       const versionAfterRetry = await readVersion(tempDir);
-      expect(versionAfterRetry).toBe("1.0");
+      expect(versionAfterRetry).toBe("2.0");
     });
 
     it("should be idempotent when run multiple times", async () => {
       // Run migration first time
-      const firstResult = await migrator.runMigration("add-memory-version-field", {
+      const firstResult = await migrator.runMigration("v0.1.0-backfill-memory-versions", {
         dryRun: false,
         backup: false,
       });
@@ -574,7 +633,7 @@ Second note`,
       expect(versionAfterFirst).toBe("1.0");
 
       // Run same migration again
-      const secondResult = await migrator.runMigration("add-memory-version-field", {
+      const secondResult = await migrator.runMigration("v0.1.0-backfill-memory-versions", {
         dryRun: false,
         backup: false,
       });
@@ -591,15 +650,15 @@ Second note`,
     it("should handle concurrent migration scenarios safely", async () => {
       // Run migration concurrently (multiple instances)
       const results = await Promise.all([
-        migrator.runMigration("add-memory-version-field", {
+        migrator.runMigration("v0.1.0-backfill-memory-versions", {
           dryRun: false,
           backup: false,
         }),
-        migrator.runMigration("add-memory-version-field", {
+        migrator.runMigration("v0.1.0-backfill-memory-versions", {
           dryRun: false,
           backup: false,
         }),
-        migrator.runMigration("add-memory-version-field", {
+        migrator.runMigration("v0.1.0-backfill-memory-versions", {
           dryRun: false,
           backup: false,
         }),
@@ -610,7 +669,7 @@ Second note`,
         const vaultResult = result.results.get(storage.vaultPath);
         expect(vaultResult).toBeTruthy();
         // Each run should report consistent results
-        expect(vaultResult!.notesProcessed).toBe(3); // All 3 notes
+        expect(vaultResult!.notesProcessed).toBe(1); // The seeded note in this vault
       }
 
       // Final schema version should be correct
@@ -619,6 +678,31 @@ Second note`,
     });
 
     it("should maintain per-vault isolation during migration", async () => {
+      await fs.writeFile(
+        path.join(tempDir, "notes", "note-1.md"),
+        `---
+title: Note 1
+tags: []
+createdAt: 2026-01-01T00:00:00.000Z
+updatedAt: 2026-01-01T00:00:00.000Z
+---
+
+Main content 1`,
+        "utf-8",
+      );
+      await fs.writeFile(
+        path.join(tempDir, "notes", "note-2.md"),
+        `---
+title: Note 2
+tags: []
+createdAt: 2026-01-01T00:00:00.000Z
+updatedAt: 2026-01-01T00:00:00.000Z
+---
+
+Main content 2`,
+        "utf-8",
+      );
+
       // Create a second vault
       const otherTempDir = await fs.mkdtemp(path.join(os.tmpdir(), "mnemonic-test-other-"));
       const otherStorage = new Storage(otherTempDir);
@@ -642,7 +726,7 @@ Second note`,
         });
 
         // Other vault starts at version 0.0
-        const otherVersionPath = path.join(otherTempDir, "schema-version.json");
+        const otherVersionPath = path.join(otherTempDir, "config.json");
         await fs.writeFile(otherVersionPath, JSON.stringify({ schemaVersion: "0.0" }, null, 2));
 
         // Mock vaultManager to include both vaults
@@ -651,35 +735,9 @@ Second note`,
         } as any;
 
         const migratorWithMultipleVaults = new Migrator(mockVaultManager);
-        migratorWithMultipleVaults.registerMigration({
-          name: "add-memory-version-field",
-          description: "Add memoryVersion to all notes",
-          minSchemaVersion: "0.0",
-          maxSchemaVersion: "1.0",
-          async run(vault: Vault, dryRun: boolean) {
-            const notes = await vault.storage.listNotes();
-            const result = {
-              notesProcessed: notes.length,
-              notesModified: 0,
-              modifiedNoteIds: [] as string[],
-              errors: [] as Array<{ noteId: string; error: string }>,
-              warnings: [] as string[],
-            };
-
-            for (const note of notes) {
-              if (!dryRun && note.memoryVersion === undefined) {
-                await vault.storage.writeNote({ ...note, memoryVersion: 1 });
-                result.notesModified++;
-                result.modifiedNoteIds.push(note.id);
-              }
-            }
-
-            return result;
-          },
-        });
 
         // Run migration on all vaults
-        const runResult = await migratorWithMultipleVaults.runMigration("add-memory-version-field", {
+        const runResult = await migratorWithMultipleVaults.runAllPending({
           dryRun: false,
           backup: false,
         });
@@ -688,8 +746,8 @@ Second note`,
         expect(runResult.vaultsProcessed).toBe(2);
 
         // Each vault should have correct results
-        const mainResult = runResult.results.get(storage.vaultPath);
-        const otherResult = runResult.results.get(otherStorage.vaultPath);
+        const mainResult = runResult.migrationResults.get(storage.vaultPath)?.[0]?.result;
+        const otherResult = runResult.migrationResults.get(otherStorage.vaultPath)?.[0]?.result;
 
         expect(mainResult?.notesProcessed).toBe(3); // 3 notes in main vault
         expect(otherResult?.notesProcessed).toBe(1); // 1 note in other vault
@@ -751,10 +809,22 @@ Second note`,
           async run(vault: Vault, dryRun: boolean) {
             callCount++;
             const notes = await vault.storage.listNotes();
+            const modifiedNoteIds = notes
+              .filter((note) => note.memoryVersion === undefined || note.memoryVersion === 0)
+              .map((note) => note.id);
+
+            if (!dryRun) {
+              for (const note of notes) {
+                if (note.memoryVersion === undefined || note.memoryVersion === 0) {
+                  await vault.storage.writeNote({ ...note, memoryVersion: 1 });
+                }
+              }
+            }
+
             return {
               notesProcessed: notes.length,
-              notesModified: dryRun ? 0 : notes.length,
-              modifiedNoteIds: dryRun ? [] : notes.map(n => n.id),
+              notesModified: dryRun ? 0 : modifiedNoteIds.length,
+              modifiedNoteIds: dryRun ? [] : modifiedNoteIds,
               errors: [],
               warnings: [],
             };

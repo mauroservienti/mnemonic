@@ -293,6 +293,10 @@ export class Storage {
   }
 
   private parseNote(id: string, raw: string): Note {
+    if (!raw.trimStart().startsWith("---")) {
+      throw new Error(`Malformed note '${id}': missing frontmatter`);
+    }
+
     const parsed = matter(raw);
     return {
       id,
