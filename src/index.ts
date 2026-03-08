@@ -10,6 +10,7 @@ import { Storage, type Note, type Relationship, type RelationshipType } from "./
 import { embed, cosineSimilarity, embedModel } from "./embeddings.js";
 import { type SyncResult } from "./git.js";
 import { filterRelationships, mergeRelationshipsFromNotes, normalizeMergePlanSourceIds } from "./consolidate.js";
+import { selectRecallResults } from "./recall.js";
 import { cleanMarkdown } from "./markdown.js";
 import { MnemonicConfigStore } from "./config.js";
 import {
@@ -909,7 +910,7 @@ server.registerTool(
     const queryVec = await embed(query);
     const vaults = await vaultManager.searchOrder(cwd);
 
-    const scored: Array<{ id: string; score: number; boosted: number; vault: Vault }> = [];
+    const scored: Array<{ id: string; score: number; boosted: number; vault: Vault; isCurrentProject: boolean }> = [];
 
     for (const vault of vaults) {
       const embeddings = await vault.storage.listEmbeddings();
@@ -936,12 +937,11 @@ server.registerTool(
         }
 
         const boost = isCurrentProject ? 0.15 : 0;
-        scored.push({ id: rec.id, score: rawScore, boosted: rawScore + boost, vault });
+        scored.push({ id: rec.id, score: rawScore, boosted: rawScore + boost, vault, isCurrentProject: Boolean(isCurrentProject) });
       }
     }
 
-    scored.sort((a, b) => b.boosted - a.boosted);
-    const top = scored.slice(0, limit);
+    const top = selectRecallResults(scored, limit, scope);
 
     if (top.length === 0) {
       return { content: [{ type: "text", text: "No memories found matching that query." }] };
