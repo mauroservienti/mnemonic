@@ -1245,33 +1245,33 @@
       <div>
         <div class="tool-category-header">Capture &amp; Retrieve</div>
         <div class="tool-category-grid">
-          <div class="tool-card" data-tip="Stores note + embedding; cwd sets project context, scope picks storage (project / global)">
+          <div class="tool-card" data-tip="Tell the AI what to remember — a decision, a pattern, a gotcha. Stores it in your project or personal vault and links it to the current context.">
             <div class="tool-card-name">remember</div>
-            <div class="tool-card-purpose">Write a new memory to the vault</div>
+            <div class="tool-card-purpose">Save something worth keeping</div>
           </div>
-          <div class="tool-card" data-tip="Cosine-similarity search over embeddings; project notes boosted +0.15 when cwd is provided">
+          <div class="tool-card" data-tip="Finds the most relevant notes for any question. Automatically surfaces project-specific memories first, then broader personal context.">
             <div class="tool-card-name">recall</div>
-            <div class="tool-card-purpose">Search memories semantically</div>
+            <div class="tool-card-purpose">Ask what you've previously learned</div>
           </div>
-          <div class="tool-card" data-tip="Updates content, title, or tags and always re-embeds; prefer over remember to avoid fragmentation">
+          <div class="tool-card" data-tip="Edit an existing note's content, title, or tags. Keeps your memory base tidy instead of letting outdated notes pile up alongside fresh ones.">
             <div class="tool-card-name">update</div>
-            <div class="tool-card-purpose">Revise an existing memory</div>
+            <div class="tool-card-purpose">Correct or expand a memory</div>
           </div>
-          <div class="tool-card" data-tip="Removes note + embedding, commits to git; cleans up all dangling relatedTo references automatically">
+          <div class="tool-card" data-tip="Permanently deletes a note and tidies up any connections to it. Can't be undone — but nothing important is ever truly lost if it was worth remembering.">
             <div class="tool-card-name">forget</div>
-            <div class="tool-card-purpose">Delete a memory permanently</div>
+            <div class="tool-card-purpose">Remove something no longer useful</div>
           </div>
-          <div class="tool-card" data-tip="Retrieves one or more notes by exact id; returns full content with frontmatter">
+          <div class="tool-card" data-tip="Retrieve a note directly by its ID — useful when you already know exactly which note you need, no searching required.">
             <div class="tool-card-name">get</div>
-            <div class="tool-card-purpose">Fetch a memory by exact id</div>
+            <div class="tool-card-purpose">Pull up a specific note</div>
           </div>
-          <div class="tool-card" data-tip="List notes filtered by scope, tags, and storage location; supports previews, relations, and timestamps">
+          <div class="tool-card" data-tip="Browse what's stored — filter by project, tag, or location. Great for a quick inventory before starting work on something familiar.">
             <div class="tool-card-name">list</div>
-            <div class="tool-card-purpose">Browse memories with filters</div>
+            <div class="tool-card-purpose">See all memories for a project or tag</div>
           </div>
-          <div class="tool-card" data-tip="Most recently updated notes for a scope and storage location; useful for orienting at session start">
+          <div class="tool-card" data-tip="Shows the most recently touched notes. Handy at the start of a session to restore context without needing to remember what you were doing.">
             <div class="tool-card-name">recent_memories</div>
-            <div class="tool-card-purpose">See what was captured recently</div>
+            <div class="tool-card-purpose">Pick up where you left off</div>
           </div>
         </div>
       </div>
@@ -1280,21 +1280,21 @@
       <div>
         <div class="tool-category-header">Knowledge Graph</div>
         <div class="tool-category-grid">
-          <div class="tool-card" data-tip="Creates a typed relationship (related-to, explains, example-of, supersedes); bidirectional by default">
+          <div class="tool-card" data-tip="Mark how two notes relate — one explains another, one is an example of another, or one supersedes another. Builds a navigable web of knowledge over time.">
             <div class="tool-card-name">relate</div>
-            <div class="tool-card-purpose">Link two memories together</div>
+            <div class="tool-card-purpose">Connect two memories</div>
           </div>
-          <div class="tool-card" data-tip="Deletes a relationship between two notes in both directions; leaves notes themselves intact">
+          <div class="tool-card" data-tip="Removes the link between two notes without deleting either one. Useful when a connection no longer makes sense after things have evolved.">
             <div class="tool-card-name">unrelate</div>
-            <div class="tool-card-purpose">Remove a link between memories</div>
+            <div class="tool-card-purpose">Break a connection between memories</div>
           </div>
-          <div class="tool-card" data-tip="Compact adjacency list of all note relationships; shows the full graph structure at a glance">
+          <div class="tool-card" data-tip="Shows all the links between notes as a map. Useful for spotting clusters of related knowledge or finding notes that have drifted out of context.">
             <div class="tool-card-name">memory_graph</div>
-            <div class="tool-card-purpose">Visualize memory connections</div>
+            <div class="tool-card-purpose">See how your memories are connected</div>
           </div>
-          <div class="tool-card" data-tip="Detect duplicates, suggest merges; execute with supersedes (keeps sources) or delete mode">
+          <div class="tool-card" data-tip="Detects near-duplicates and suggests merges. You choose whether to delete the originals or keep them as archived sources for traceability.">
             <div class="tool-card-name">consolidate</div>
-            <div class="tool-card-purpose">Merge duplicate or related notes</div>
+            <div class="tool-card-purpose">Clean up overlapping notes</div>
           </div>
         </div>
       </div>
@@ -1303,37 +1303,37 @@
       <div>
         <div class="tool-category-header">Project Context</div>
         <div class="tool-category-grid">
-          <div class="tool-card" data-tip="Resolves cwd to a stable project id via git remote URL normalization; consistent across machines">
+          <div class="tool-card" data-tip="Uses the git remote URL to give every project a stable identity — the same across your laptop, a colleague's machine, and CI.">
             <div class="tool-card-name">detect_project</div>
-            <div class="tool-card-purpose">Identify which project a directory belongs to</div>
+            <div class="tool-card-purpose">Check which project this folder belongs to</div>
           </div>
-          <div class="tool-card" data-tip="Summarizes note count, recent activity, tags, and relationships for the current project">
+          <div class="tool-card" data-tip="A quick snapshot: how many notes exist, what was touched recently, which tags are in use, and how the notes connect to each other.">
             <div class="tool-card-name">project_memory_summary</div>
-            <div class="tool-card-purpose">Overview of a project's memory</div>
+            <div class="tool-card-purpose">What does mnemonic know about this project?</div>
           </div>
-          <div class="tool-card" data-tip="Shows a note's project association and actual storage path (main-vault or project-vault)">
+          <div class="tool-card" data-tip="Tells you whether a note lives in your personal vault or alongside the project's code — and exactly where on disk.">
             <div class="tool-card-name">where_is_memory</div>
-            <div class="tool-card-purpose">Check where a memory is stored</div>
+            <div class="tool-card-purpose">Find where a specific note lives</div>
           </div>
-          <div class="tool-card" data-tip="Moves note between main and project vault without changing its id; preserves metadata and relationships">
+          <div class="tool-card" data-tip="Shifts a note between your personal vault and the project vault without changing its ID or losing any of its connections.">
             <div class="tool-card-name">move_memory</div>
-            <div class="tool-card-purpose">Transfer a memory between vaults</div>
+            <div class="tool-card-purpose">Move a note from personal to project (or back)</div>
           </div>
-          <div class="tool-card" data-tip="Shows effective project identity and any git remote override configured for fork workflows">
+          <div class="tool-card" data-tip="Shows which git remote is used to identify the project, and whether you've overridden it — for example, to point at an upstream fork instead of your copy.">
             <div class="tool-card-name">get_project_identity</div>
-            <div class="tool-card-purpose">See how a project is identified</div>
+            <div class="tool-card-purpose">See this project's identity</div>
           </div>
-          <div class="tool-card" data-tip="Overrides which git remote (e.g. upstream vs origin) is used to derive the stable project slug">
+          <div class="tool-card" data-tip="Useful for forks: point mnemonic at 'upstream' instead of 'origin' so your notes stay tied to the canonical project, not just your copy of it.">
             <div class="tool-card-name">set_project_identity</div>
-            <div class="tool-card-purpose">Configure project identity source</div>
+            <div class="tool-card-purpose">Change which remote defines this project</div>
           </div>
-          <div class="tool-card" data-tip="Shows saved default: project vault, global vault, or ask each time a memory is written">
+          <div class="tool-card" data-tip="Shows whether new memories will go to the project vault, your personal vault, or whether mnemonic will ask you each time.">
             <div class="tool-card-name">get_project_memory_policy</div>
-            <div class="tool-card-purpose">Check default write scope</div>
+            <div class="tool-card-purpose">Check where new memories go by default</div>
           </div>
-          <div class="tool-card" data-tip="Saves default write scope (project / global / ask) and consolidation mode for a project">
+          <div class="tool-card" data-tip="Set it once per project: always use the project vault, always use your personal vault, or get asked every time. Saves you from deciding on every capture.">
             <div class="tool-card-name">set_project_memory_policy</div>
-            <div class="tool-card-purpose">Configure where memories go by default</div>
+            <div class="tool-card-purpose">Choose where new memories go by default</div>
           </div>
         </div>
       </div>
@@ -1342,21 +1342,21 @@
       <div>
         <div class="tool-category-header">Vault Operations</div>
         <div class="tool-category-grid">
-          <div class="tool-card" data-tip="Bidirectional sync: fetch → pull (rebase) → push → auto-embed pulled notes; keeps all machines current">
+          <div class="tool-card" data-tip="Pulls new notes from git, pushes your changes, and makes sure everything is ready to search. One call keeps all your machines in agreement.">
             <div class="tool-card-name">sync</div>
-            <div class="tool-card-purpose">Sync vault with git</div>
+            <div class="tool-card-purpose">Keep memories in sync across machines</div>
           </div>
-          <div class="tool-card" data-tip="Rebuilds missing embeddings; force=true rebuilds all; run after switching machines or embedding models">
+          <div class="tool-card" data-tip="Regenerates the search index from your notes. Needed after cloning on a new machine, or if search results start feeling stale or wrong.">
             <div class="tool-card-name">reindex</div>
-            <div class="tool-card-purpose">Rebuild embeddings</div>
+            <div class="tool-card-purpose">Rebuild search after switching machines</div>
           </div>
-          <div class="tool-card" data-tip="Lists available migrations and pending count for the current vault schema version">
+          <div class="tool-card" data-tip="Shows whether any format changes are pending for your vault. Run this after updating mnemonic to see what needs to be applied.">
             <div class="tool-card-name">list_migrations</div>
-            <div class="tool-card-purpose">Check pending schema updates</div>
+            <div class="tool-card-purpose">Check if your vault needs updating</div>
           </div>
-          <div class="tool-card" data-tip="Runs a named migration with dry-run mode support; handles per-vault isolation safely">
+          <div class="tool-card" data-tip="Applies a format change to your notes. Includes a preview mode so you can see exactly what will change before anything is written.">
             <div class="tool-card-name">execute_migration</div>
-            <div class="tool-card-purpose">Apply a schema migration</div>
+            <div class="tool-card-purpose">Update your vault to the latest format</div>
           </div>
         </div>
       </div>
