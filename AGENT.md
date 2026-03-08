@@ -285,10 +285,11 @@ Any change to note format, frontmatter schema, config structure, or relationship
 **Migration testing pattern** (see `tests/migration.test.ts`):
 - Test dry-run mode shows correct changes
 - Test execute mode modifies notes correctly
-- Test idempotency (re-running doesn't break already-migrated notes)
+- **Test idempotency with `assertMigrationIdempotent()` from `tests/migration-helpers.ts`** — every migration MUST pass this check (run twice, second run modifies nothing). This is required because project vaults may be migrated independently of the main vault's schema version, causing re-runs.
 - Test version comparison logic for all version schemes (0.1, 0.2, 1.0, etc.)
 - Test error handling for malformed data
 - Test per-vault isolation (project vault succeeds, main vault fails = OK)
+- When adding a new latest-schema migration, bump `defaultConfig.schemaVersion` in `src/config.ts` at the same time so fresh installs start at the current schema.
 
 **Test files mirrored to source structure**:
 - `src/storage.ts` → `tests/storage.test.ts` (doesn't exist yet, add when needed)

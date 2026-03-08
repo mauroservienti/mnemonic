@@ -3,9 +3,39 @@ import { Migrator } from "../src/migration.js";
 import { Storage } from "../src/storage.js";
 import { GitOps } from "../src/git.js";
 import type { Vault, VaultManager } from "../src/vault.js";
+import { assertMigrationIdempotent } from "./migration-helpers.js";
 import * as fs from "fs/promises";
 import * as path from "path";
 import os from "os";
+
+function createFailingAtomicityMigration() {
+  return {
+    name: "failing-atomicity-check",
+    description: "Writes one note, then reports an error on another",
+    minSchemaVersion: "0.0",
+    maxSchemaVersion: "2.0",
+    async run(vault: Vault) {
+      const notes = await vault.storage.listNotes();
+      const first = notes.find((note) => note.id === "note-1");
+      const result = {
+        notesProcessed: notes.length,
+        notesModified: 0,
+        modifiedNoteIds: [] as string[],
+        errors: [] as Array<{ noteId: string; error: string }>,
+        warnings: [] as string[],
+      };
+
+      if (first) {
+        await vault.storage.writeNote({ ...first, content: `${first.content}\n\nUpdated by migration.` });
+        result.notesModified = 1;
+        result.modifiedNoteIds.push(first.id);
+      }
+
+      result.errors.push({ noteId: "note-2", error: "Synthetic failure after first write" });
+      return result;
+    },
+  };
+}
 
 describe("Migrator", () => {
   let tempDir: string;
@@ -41,6 +71,22 @@ describe("Migrator", () => {
       const migrations = migrator.listAvailableMigrations();
       expect(migrations.length).toBeGreaterThan(0);
       expect(migrations.some(m => m.name === "v0.1.0-backfill-memory-versions")).toBe(true);
+    });
+
+    it("warns when registering an unbounded migration", () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      migrator.registerMigration({
+        name: "always-run-fixup",
+        description: "No version constraints",
+        async run() {
+          return { notesProcessed: 0, notesModified: 0, modifiedNoteIds: [], errors: [], warnings: [] };
+        },
+      });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "[migration] Warning: always-run-fixup has no version constraints and will run on every invocation.",
+      );
     });
   });
 
@@ -190,14 +236,37 @@ Content of ${title}`;
         "This is not a markdown file",
         "utf-8"
       );
-      
+
       const migration = migrator.listAvailableMigrations()
         .find(m => m.name === "v0.1.0-backfill-memory-versions")!;
-      
+
       const result = await migration.run(vault, false);
-      
+
       expect(result.notesProcessed).toBe(0);
       expect(result.errors.length).toBe(0);
+    });
+
+    it("should be idempotent — second run modifies nothing", async () => {
+      await writeOldNote("note-1", "Note 1");
+      await writeOldNote("note-2", "Note 2");
+      await writeNewNote("note-3", "Note 3");
+
+      const migration = migrator.listAvailableMigrations()
+        .find(m => m.name === "v0.1.0-backfill-memory-versions")!;
+
+      await migration.run(vault, false);
+      await assertMigrationIdempotent(migration, vault);
+    });
+
+    it("should be idempotent after repairing invalid versions", async () => {
+      await writeInvalidVersionNote("bad-note", "Bad Note");
+      await writeOldNote("old-note", "Old Note");
+
+      const migration = migrator.listAvailableMigrations()
+        .find(m => m.name === "v0.1.0-backfill-memory-versions")!;
+
+      await migration.run(vault, false);
+      await assertMigrationIdempotent(migration, vault);
     });
   });
 
@@ -257,6 +326,49 @@ Test content`;
         migrator.runMigration("unknown-migration", { dryRun: true })
       ).rejects.toThrow("Unknown migration: unknown-migration");
     });
+
+    it("rolls back note writes when a migration reports errors", async () => {
+      await fs.writeFile(
+        path.join(tempDir, "notes", "note-1.md"),
+        `---
+title: Note 1
+tags: []
+createdAt: 2026-01-01T00:00:00.000Z
+updatedAt: 2026-01-01T00:00:00.000Z
+memoryVersion: 1
+---
+
+Original content`,
+        "utf-8"
+      );
+      await fs.writeFile(
+        path.join(tempDir, "notes", "note-2.md"),
+        `---
+title: Note 2
+tags: []
+createdAt: 2026-01-01T00:00:00.000Z
+updatedAt: 2026-01-01T00:00:00.000Z
+memoryVersion: 1
+---
+
+Second note`,
+        "utf-8"
+      );
+
+      migrator.registerMigration(createFailingAtomicityMigration());
+      const commitSpy = vi.spyOn(vault.git, "commit").mockResolvedValue(true);
+      const pushSpy = vi.spyOn(vault.git, "push").mockResolvedValue(undefined);
+
+      const { results } = await migrator.runMigration("failing-atomicity-check", { dryRun: false });
+
+      expect(results.get(tempDir)?.errors).toHaveLength(1);
+      expect(results.get(tempDir)?.warnings).toContain("Atomic migration rollback applied; note changes were not flushed to disk.");
+      expect(commitSpy).not.toHaveBeenCalled();
+      expect(pushSpy).not.toHaveBeenCalled();
+
+      const note = await storage.readNote("note-1");
+      expect(note?.content).toBe("Original content");
+    });
   });
 
   describe("runAllPending", () => {
@@ -280,14 +392,18 @@ Test content`;
     });
 
     it("persists the latest schema version after successful execution", async () => {
-      const commitSpy = vi.spyOn(vault.git, "commit").mockResolvedValue();
-      const pushSpy = vi.spyOn(vault.git, "push").mockResolvedValue();
+      const commitSpy = vi.spyOn(vault.git, "commit").mockResolvedValue(true);
+      const pushSpy = vi.spyOn(vault.git, "push").mockResolvedValue(undefined);
 
       const result = await migrator.runAllPending({ dryRun: false });
 
       expect(result.vaultsProcessed).toBe(1);
       expect(commitSpy).toHaveBeenCalled();
       expect(pushSpy).toHaveBeenCalled();
+      expect(commitSpy).toHaveBeenCalledWith(
+        expect.stringContaining("migrate: apply pending migrations"),
+        expect.arrayContaining(["notes/test-note.md", "config.json"]),
+      );
 
       const config = JSON.parse(await fs.readFile(path.join(tempDir, "config.json"), "utf-8")) as {
         schemaVersion: string;
@@ -304,11 +420,93 @@ Test content`;
       expect(config.schemaVersion).toBe("0.0");
     });
 
-    it("does not advance global schema version for cwd-scoped runs", async () => {
-      vi.spyOn(vault.git, "commit").mockResolvedValue();
-      vi.spyOn(vault.git, "push").mockResolvedValue();
+    it("advances schema version for cwd-scoped vault independently", async () => {
+      vi.spyOn(vault.git, "commit").mockResolvedValue(true);
+      vi.spyOn(vault.git, "push").mockResolvedValue(undefined);
 
       await migrator.runAllPending({ dryRun: false, cwd: tempDir });
+
+      const config = JSON.parse(await fs.readFile(path.join(tempDir, "config.json"), "utf-8")) as {
+        schemaVersion: string;
+      };
+      expect(config.schemaVersion).toBe("1.0");
+    });
+
+    it("only migrates vaults that are behind on schema version", async () => {
+      // Create a second vault already at 1.0
+      const otherDir = await fs.mkdtemp(path.join(os.tmpdir(), "mnemonic-other-"));
+      const otherStorage = new Storage(otherDir);
+      await otherStorage.init();
+      await fs.writeFile(
+        path.join(otherDir, "config.json"),
+        JSON.stringify({ schemaVersion: "1.0" }),
+        "utf-8"
+      );
+      const otherVault: Vault = {
+        storage: otherStorage,
+        git: new GitOps(otherDir, "notes"),
+        notesRelDir: "notes",
+        isProject: true,
+      };
+
+      vaultManager.allKnownVaults = vi.fn().mockReturnValue([vault, otherVault]);
+      vi.spyOn(vault.git, "commit").mockResolvedValue(true);
+      vi.spyOn(vault.git, "push").mockResolvedValue(undefined);
+
+      const { migrationResults } = await migrator.runAllPending({ dryRun: false });
+
+      // Main vault (at 0.0) should have been migrated
+      expect(migrationResults.has(tempDir)).toBe(true);
+      // Other vault (at 1.0) should have been skipped entirely
+      expect(migrationResults.has(otherDir)).toBe(false);
+    });
+
+    it("rolls back pending migration writes and leaves schema version unchanged on errors", async () => {
+      await fs.writeFile(
+        path.join(tempDir, "notes", "note-1.md"),
+        `---
+title: Note 1
+tags: []
+createdAt: 2026-01-01T00:00:00.000Z
+updatedAt: 2026-01-01T00:00:00.000Z
+memoryVersion: 1
+---
+
+Original content`,
+        "utf-8"
+      );
+      await fs.writeFile(
+        path.join(tempDir, "notes", "note-2.md"),
+        `---
+title: Note 2
+tags: []
+createdAt: 2026-01-01T00:00:00.000Z
+updatedAt: 2026-01-01T00:00:00.000Z
+memoryVersion: 1
+---
+
+Second note`,
+        "utf-8"
+      );
+
+      migrator.registerMigration(createFailingAtomicityMigration());
+      const commitSpy = vi.spyOn(vault.git, "commit").mockResolvedValue(true);
+      const pushSpy = vi.spyOn(vault.git, "push").mockResolvedValue(undefined);
+
+      const { migrationResults } = await migrator.runAllPending({ dryRun: false });
+
+      const failingResult = migrationResults.get(tempDir)?.find(
+        ({ migration }) => migration === "failing-atomicity-check"
+      )?.result;
+      expect(failingResult?.errors).toHaveLength(1);
+      expect(failingResult?.warnings).toContain(
+        "Schema version not advanced because one or more migrations reported errors; staged note updates were rolled back.",
+      );
+      expect(commitSpy).not.toHaveBeenCalled();
+      expect(pushSpy).not.toHaveBeenCalled();
+
+      const note = await storage.readNote("note-1");
+      expect(note?.content).toBe("Original content");
 
       const config = JSON.parse(await fs.readFile(path.join(tempDir, "config.json"), "utf-8")) as {
         schemaVersion: string;
@@ -329,6 +527,96 @@ Test content`;
     it("rejects invalid schema versions", async () => {
       const migratorAny = new Migrator(vaultManager);
       await expect(migratorAny.getPendingMigrations("v1")).rejects.toThrow("Invalid schema version: v1");
+    });
+  });
+
+  describe("Migration ordering", () => {
+    it("should return pending migrations sorted by target version", async () => {
+      // Register migrations out of order to prove sorting works
+      migrator.registerMigration({
+        name: "upgrade-to-3.0",
+        description: "Third migration",
+        minSchemaVersion: "2.0",
+        maxSchemaVersion: "3.0",
+        async run(_vault, _dryRun) {
+          return { notesProcessed: 0, notesModified: 0, modifiedNoteIds: [], errors: [], warnings: [] };
+        },
+      });
+      migrator.registerMigration({
+        name: "upgrade-to-2.0",
+        description: "Second migration",
+        minSchemaVersion: "1.0",
+        maxSchemaVersion: "2.0",
+        async run(_vault, _dryRun) {
+          return { notesProcessed: 0, notesModified: 0, modifiedNoteIds: [], errors: [], warnings: [] };
+        },
+      });
+
+      const pending = await migrator.getPendingMigrations("0.0");
+      const names = pending.map(m => m.name);
+
+      expect(names).toEqual([
+        "v0.1.0-backfill-memory-versions", // maxSchemaVersion 1.0
+        "upgrade-to-2.0",                  // maxSchemaVersion 2.0
+        "upgrade-to-3.0",                  // maxSchemaVersion 3.0
+      ]);
+    });
+
+    it("should place unbounded migrations after versioned ones", async () => {
+      migrator.registerMigration({
+        name: "always-run-fixup",
+        description: "No version constraints",
+        async run(_vault, _dryRun) {
+          return { notesProcessed: 0, notesModified: 0, modifiedNoteIds: [], errors: [], warnings: [] };
+        },
+      });
+      migrator.registerMigration({
+        name: "upgrade-to-2.0",
+        description: "Second migration",
+        minSchemaVersion: "1.0",
+        maxSchemaVersion: "2.0",
+        async run(_vault, _dryRun) {
+          return { notesProcessed: 0, notesModified: 0, modifiedNoteIds: [], errors: [], warnings: [] };
+        },
+      });
+
+      const pending = await migrator.getPendingMigrations("0.0");
+      const names = pending.map(m => m.name);
+
+      expect(names).toEqual([
+        "v0.1.0-backfill-memory-versions", // maxSchemaVersion 1.0
+        "upgrade-to-2.0",                  // maxSchemaVersion 2.0
+        "always-run-fixup",                // unbounded — last
+      ]);
+    });
+
+    it("should sort by minSchemaVersion when maxSchemaVersion is absent", async () => {
+      migrator.registerMigration({
+        name: "min-only-at-3.0",
+        description: "Has only minSchemaVersion",
+        minSchemaVersion: "3.0",
+        async run(_vault, _dryRun) {
+          return { notesProcessed: 0, notesModified: 0, modifiedNoteIds: [], errors: [], warnings: [] };
+        },
+      });
+      migrator.registerMigration({
+        name: "upgrade-to-2.0",
+        description: "Has maxSchemaVersion",
+        minSchemaVersion: "1.0",
+        maxSchemaVersion: "2.0",
+        async run(_vault, _dryRun) {
+          return { notesProcessed: 0, notesModified: 0, modifiedNoteIds: [], errors: [], warnings: [] };
+        },
+      });
+
+      const pending = await migrator.getPendingMigrations("0.0");
+      const names = pending.map(m => m.name);
+
+      expect(names).toEqual([
+        "v0.1.0-backfill-memory-versions", // maxSchemaVersion 1.0
+        "upgrade-to-2.0",                  // maxSchemaVersion 2.0
+        "min-only-at-3.0",                 // minSchemaVersion 3.0
+      ]);
     });
   });
 });

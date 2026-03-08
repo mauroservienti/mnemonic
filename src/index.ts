@@ -12,7 +12,7 @@ import { type SyncResult } from "./git.js";
 import { filterRelationships, mergeRelationshipsFromNotes, normalizeMergePlanSourceIds } from "./consolidate.js";
 import { selectRecallResults } from "./recall.js";
 import { cleanMarkdown } from "./markdown.js";
-import { MnemonicConfigStore } from "./config.js";
+import { MnemonicConfigStore, readVaultSchemaVersion } from "./config.js";
 import {
   CONSOLIDATION_MODES,
   PROJECT_POLICY_SCOPES,
@@ -85,14 +85,18 @@ Examples:
       const migrations = migrator.listAvailableMigrations();
       console.log("Available migrations:");
       migrations.forEach(m => console.log(`  ${m.name}: ${m.description}`));
-      
-      const configStore = new MnemonicConfigStore(VAULT_PATH);
-      const config = await configStore.load();
-      const pending = await migrator.getPendingMigrations(config.schemaVersion);
-      console.log(`\nSchema version: ${config.schemaVersion}`);
-      console.log(`Pending migrations: ${pending.length}`);
-      
-      if (dryRun && pending.length > 0) {
+
+      console.log("\nVault schema versions:");
+      let totalPending = 0;
+      for (const vault of vaultManager.allKnownVaults()) {
+        const version = await readVaultSchemaVersion(vault.storage.vaultPath);
+        const pending = await migrator.getPendingMigrations(version);
+        totalPending += pending.length;
+        const label = vault.isProject ? "project" : "main";
+        console.log(`  ${label} (${vault.storage.vaultPath}): ${version} — ${pending.length} pending`);
+      }
+
+      if (dryRun && totalPending > 0) {
         console.log("\n💡 Run without --dry-run to execute these migrations");
         console.log("   Changes will be automatically committed and pushed");
       }
@@ -174,6 +178,7 @@ const vaultManager = new VaultManager(VAULT_PATH);
 await vaultManager.initMain();
 const configStore = new MnemonicConfigStore(VAULT_PATH);
 const config = await configStore.load();
+const migrator = new Migrator(vaultManager);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -616,8 +621,6 @@ server.registerTool(
 );
 
 // ── list_migrations ───────────────────────────────────────────────────────────
-const migrator = new Migrator(vaultManager);
-
 server.registerTool(
   "list_migrations",
   {
@@ -626,28 +629,31 @@ server.registerTool(
     inputSchema: z.object({}),
   },
   async () => {
-    const config = await configStore.load();
     const available = migrator.listAvailableMigrations();
-    const pending = await migrator.getPendingMigrations(config.schemaVersion);
-    
     const lines: string[] = [];
-    lines.push(`Schema version: ${config.schemaVersion}`);
-    lines.push(`Pending migrations: ${pending.length}`);
-    lines.push("")
+
+    lines.push("Vault schema versions:");
+    let totalPending = 0;
+    for (const vault of vaultManager.allKnownVaults()) {
+      const version = await readVaultSchemaVersion(vault.storage.vaultPath);
+      const pending = await migrator.getPendingMigrations(version);
+      totalPending += pending.length;
+      const label = vault.isProject ? "project" : "main";
+      lines.push(`  ${label} (${vault.storage.vaultPath}): ${version} — ${pending.length} pending`);
+    }
+
+    lines.push("");
     lines.push("Available migrations:");
-    
     for (const migration of available) {
-      const isPending = pending.some(p => p.name === migration.name);
-      const marker = isPending ? " *" : "  ";
-      lines.push(`${marker} ${migration.name}`);
+      lines.push(`  ${migration.name}`);
       lines.push(`   ${migration.description}`);
     }
-    
+
     lines.push("");
-    if (pending.length > 0) {
+    if (totalPending > 0) {
       lines.push("Run migration with: mnemonic migrate (CLI) or execute_migration (MCP)");
     }
-    
+
     return { content: [{ type: "text", text: lines.join("\n") }] };
   }
 );
@@ -2225,7 +2231,38 @@ async function dryRunAll(
   return { content: [{ type: "text", text: lines.join("\n") }] };
 }
 
+async function warnAboutPendingMigrationsOnStartup(): Promise<void> {
+  let totalPending = 0;
+  const details: string[] = [];
+
+  for (const vault of vaultManager.allKnownVaults()) {
+    const version = await readVaultSchemaVersion(vault.storage.vaultPath);
+    const pending = await migrator.getPendingMigrations(version);
+    if (pending.length === 0) {
+      continue;
+    }
+
+    totalPending += pending.length;
+    const label = vault.isProject ? "project" : "main";
+    details.push(
+      `${label} (${vault.storage.vaultPath}): ${pending.length} pending from schema ${version}`,
+    );
+  }
+
+  if (totalPending === 0) {
+    return;
+  }
+
+  console.error(
+    `[mnemonic] ${totalPending} pending migration(s) detected - run "mnemonic migrate --dry-run" to preview`,
+  );
+  for (const detail of details) {
+    console.error(`[mnemonic]   ${detail}`);
+  }
+}
+
 // ── start ─────────────────────────────────────────────────────────────────────
+await warnAboutPendingMigrationsOnStartup();
 const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error(`[mnemonic] Started. Main vault: ${VAULT_PATH}`);

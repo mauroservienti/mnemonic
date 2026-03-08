@@ -32,6 +32,39 @@ function normalizeConcurrency(value: unknown): number {
   return Math.min(16, Math.max(1, Math.floor(value)));
 }
 
+/**
+ * Read the schema version from a vault's config.json.
+ * Works for both main vault and project vaults.
+ * Returns the default schema version if no config exists.
+ */
+export async function readVaultSchemaVersion(vaultPath: string): Promise<string> {
+  const filePath = path.join(path.resolve(vaultPath), "config.json");
+  try {
+    const raw = await fs.readFile(filePath, "utf-8");
+    const parsed = JSON.parse(raw) as { schemaVersion?: unknown };
+    return normalizeSchemaVersion(parsed.schemaVersion);
+  } catch {
+    return defaultConfig.schemaVersion;
+  }
+}
+
+/**
+ * Write the schema version to a vault's config.json.
+ * Preserves any existing fields in the file.
+ */
+export async function writeVaultSchemaVersion(vaultPath: string, schemaVersion: string): Promise<void> {
+  const filePath = path.join(path.resolve(vaultPath), "config.json");
+  let existing: Record<string, unknown> = {};
+  try {
+    const raw = await fs.readFile(filePath, "utf-8");
+    existing = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    // No existing config — start fresh
+  }
+  existing.schemaVersion = normalizeSchemaVersion(schemaVersion);
+  await fs.writeFile(filePath, JSON.stringify(existing, null, 2) + "\n", "utf-8");
+}
+
 export class MnemonicConfigStore {
   readonly filePath: string;
 
