@@ -1,52 +1,37 @@
 # mnemonic — Agent Context
 
-## What this project is
+⚠️ **WHEN WORKING ON MNEMONIC: Always test changes with local MCP server first (`npm run mcp:local` or `scripts/mcp-local.sh`)**
 
-A personal MCP memory server. The goal is to give LLMs persistent, cross-session memory that syncs across machines without running a permanent service or database.
-
-The core idea: store everything as plain markdown files in a git repo, compute embeddings locally via Ollama, and expose it all through an MCP server. No Postgres, no Docker services that need to stay running — just files, git, and a Node process that the MCP client spawns on demand.
-
-Inspired by [petabridge/memorizer](https://github.com/petabridge/memorizer) but without the Postgres/pgvector dependency.
+A personal MCP memory server. Stores LLM memories as plain markdown in a git repo with local embeddings via Ollama. No database or permanent services required.
 
 ## Dogfooding protocol
 
-When implementing a new feature or behavior in mnemonic itself, dogfood the local MCP server as part of the work:
-- Rebuild first (`npm run build`) so the stdio server uses the latest code.
-- Prefer the repo-local helper (`npm run mcp:local` or `scripts/mcp-local.sh`) when wiring a local MCP client to mnemonic during development.
-- Use the project-scoped `mnemonic` MCP server for real operations whenever the feature touches memory behavior, note formatting, retrieval, relationships, sync, or indexing.
-- Prefer exercising the feature through MCP tools (`remember`, `update`, `get`, `relate`, `recall`, etc.) instead of writing `.mnemonic/` files directly.
-- Mnemoize important implementation decisions, tradeoffs, and debugging findings through the MCP server so future agents can recall them.
-- **Never fall back to direct file writes when in dogfooding mode.** If the MCP tool call fails, troubleshoot the tool or use `scripts/mcp-local.sh` directly rather than bypassing the server.
+When working on mnemonic itself:
+- Rebuild first: `npm run build`
+- Use local MCP: `npm run mcp:local` or `scripts/mcp-local.sh`
+- Use project-scoped `mnemonic` MCP for memory operations
+- Exercise features through MCP tools (`remember`, `update`, `get`, `relate`, `recall`)
+- Mnemoize decisions and findings through MCP (never write `.mnemonic/` files directly)
 
-### Dogfooding troubleshooting
-
-**Complex JSON payloads failing silently:** When sending multiline content or special characters via stdio, shell escaping can corrupt the JSON. Write payloads to a temp file first, then pipe to the MCP server:
-
+**Troubleshooting:** Complex JSON payloads may fail via stdio due to shell escaping. Write to temp file first:
 ```bash
-# Write request to file
 cat > /tmp/request.json << 'JSON'
 {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{...}}
 JSON
-
-# Pipe to MCP
 (
   echo '{"jsonrpc":"2.0","id":0,"method":"initialize",...}'
   cat /tmp/request.json
 ) | ./scripts/mcp-local.sh
 ```
 
-**Verify the result:** Always confirm notes were created by running `recent_memories` or `list` after `remember`. Truncated responses don't mean failure.
-
 ## Git commit message protocol
 
-All MCP tools that modify memory state must follow a standardized git commit format to ensure consistency and traceability.
-
-### Commit message format
+All memory-modifying tools follow standardized commits via `formatCommitBody()` in `src/index.ts`:
 
 ```
-tool(action): Brief description (50 chars max recommended)
+tool(action): Brief description
 
-Human-readable summary explaining the change (like a good commit message).
+Human-readable summary.
 
 - Note: <id> (<title>)
 - Notes: <count> notes affected
@@ -60,162 +45,96 @@ Human-readable summary explaining the change (like a good commit message).
 - Description: <additional context>
 ```
 
-### Standard body fields
+### Tool conventions
 
-| Field | When to use | Example |
-|-------|-------------|---------|
-| `Summary` | Always - human-readable first line | First sentence of note content or change description |
-| `Note` | Single note operation | `- Note: abc-123 (My Note Title)` |
-| `Notes` | Multiple notes affected | `- Notes: 3 notes affected` |
-| `Project` | Project-scoped operation | `- Project: mnemonic` |
-| `Scope` | Storage location | `- Scope: project` |
-| `Tags` | When relevant | `- Tags: design, architecture` |
-| `Relationship` | Relate/unrelate operations | `- Relationship: abc-123 explains def-456` |
-| `Mode` | Consolidation mode | `- Mode: supersedes` |
-| `Description` | Additional context (optional) | `- Description: Additional technical details` |
-
-### Implementation
-
-Use `formatCommitBody()` helper in `src/index.ts`:
-
-```typescript
-// For remember: extract summary from note content
-const summary = extractSummary(cleanedContent);
-
-const commitBody = formatCommitBody({
-  summary,
-  noteId: id,
-  noteTitle: title,
-  projectName: project?.name,
-  scope: writeScope,
-  tags: tags,
-});
-
-await vault.git.commit(`remember: ${title}`, [files], commitBody);
-```
-
-### Tool-specific conventions
-
-| Tool | Subject format | Summary source | Required body fields |
-|------|----------------|----------------|---------------------|
-| `remember` | `remember: <title>` | `summary` parameter (LLM-provided), fallback to first sentence | Summary, Note, Project, Scope, Tags |
-| `update` | `update: <title>` | `summary` parameter (LLM-provided), fallback to "Updated X, Y, Z" | Summary, Note, Project, Tags |
+| Tool | Subject format | Summary source | Body fields |
+|------|----------------|----------------|-------------|
+| `remember` | `remember: <title>` | `summary` param or first sentence | Summary, Note, Project, Scope, Tags |
+| `update` | `update: <title>` | `summary` param or "Updated X, Y, Z" | Summary, Note, Project, Tags |
 | `forget` | `forget: <title>` | "Deleted note and cleaned up N reference(s)" | Summary, Note, Project |
 | `move` | `move: <title>` | "Moved from X-vault to Y-vault" | Summary, Note, Project |
 | `relate` | `relate: <title1> ↔ <title2>` | Context of relationship | Summary, Note, Project, Relationship |
-| `unrelate` | `unrelate: <id1> ↔ <id2>` | Context of relationship removal | Summary, Note, Project |
-| `consolidate` | `consolidate(<mode>): <title>` | `mergePlan.summary` (LLM-provided), fallback to "Consolidated N notes" | Summary, Note(s), Project, Mode |
+| `unrelate` | `unrelate: <id1> ↔ <id2>` | Context of removal | Summary, Note, Project |
+| `consolidate` | `consolidate(<mode>): <title>` | `mergePlan.summary` or "Consolidated N notes" | Summary, Note(s), Project, Mode |
 | `prune` | `prune: removed N superseded note(s)` | "Pruned N superseded notes" | Summary, Note(s) |
 | `policy` | `policy: <project> default scope <scope>` | "Set default scope to X" | Summary, Project |
 
-**LLM-provided summary guidance:**
-Tools marked with "LLM-provided" support optional `summary` parameters:
-- `remember`: `summary` parameter
-- `update`: `summary` parameter  
-- `consolidate`: `mergePlan.summary` parameter
+**LLM summary format:** Imperative mood, 50-72 chars, explain "why" not "what".
 
-When provided, LLM should write commit-message-style summaries:
-- Imperative mood ("Add", "Fix", "Update", not "Added", "Fixed")
-- 50-72 characters recommended
-- Explain the "why", not just the "what"
-- Examples:
-  - "Document JWT RS256 migration for distributed auth"
-  - "Clarify consolidation rationale for release workflow notes"
-  - "Fix outdated references to legacy package name"
+## Design decisions
 
-When not provided, tools fall back to auto-generated descriptions.
+### Markdown + YAML frontmatter
+- Human-readable, git-diffable, one file per note (isolated conflicts), no lock-in
 
-**All new tools must follow this protocol.** Review existing implementations as templates.
-
-## Design decisions and rationale
-
-### Markdown + YAML frontmatter as storage
-Notes are plain `.md` files with YAML frontmatter. This was chosen deliberately:
-- Human-readable and editable outside the tool
-- Git-diffable — merge conflicts are resolvable by a human
-- One file per note means conflicts are isolated to the specific note that was edited simultaneously on two machines
-- No lock-in — the vault is just a folder of text files
-
-### Embeddings are local-only (gitignored)
-Embeddings are stored as individual JSON files in `embeddings/` but this folder is gitignored. Rationale:
-- Embeddings are derived/generated data — they can always be recomputed from the notes
-- Committing them would introduce binary-ish merge conflicts that can't be resolved meaningfully (you can't merge two float arrays)
-- At personal scale (hundreds to low thousands of notes), reindexing on a new machine is fast enough
-- The `sync` tool handles this automatically: after pulling it embeds any notes that arrived without embeddings
-
-Alternative considered: commit embeddings and use `merge=ours` strategy in `.gitattributes` to always take the local version on conflict. Valid approach if reindex time becomes painful at large scale.
+### Embeddings gitignored
+- Derived data, recomputable; avoids binary merge conflicts
+- Reindex on new machine is fast at personal scale
+- `sync` auto-embeds pulled notes
 
 ### Project scoping via git remote URL
-Project identity is derived by running `git remote get-url origin` from the provided `cwd`, then normalizing the URL to a stable slug:
-- `git@github.com:acme/myapp.git` → `github-com-acme-myapp`
-- `https://github.com/acme/myapp` → `github-com-acme-myapp`
+```
+git@github.com:acme/myapp.git → github-com-acme-myapp
+https://github.com/acme/myapp → github-com-acme-myapp
+```
+Ensures consistency across machines. Fallback: git remote → git root folder → directory name.
 
-This ensures the same project is recognized across machines regardless of local clone path. Fallback chain: git remote → git root folder name → directory name.
-
-### Project-boosted recall, not hard filtering
-When `recall` is called with a `cwd`, project-specific notes get a **+0.15 cosine similarity boost** rather than being the only results returned. This means:
-- Project context surfaces first
-- Global memories (user preferences, cross-project knowledge) are still accessible
-- The LLM gets a richer, more complete context window
+### Project-boosted recall
+When `recall` called with `cwd`, project notes get **+0.15 cosine similarity boost** (not hard filter). Keeps global memories accessible while prioritizing project context.
 
 ### Multi-vault architecture
-There are two kinds of vault:
+- **Main vault** (`~/mnemonic-vault`): Private global memories, own git repo
+- **Project vault** (`<git-root>/.mnemonic/`): Project-specific memories, committed to project repo
 
-- **Main vault** (`~/mnemonic-vault` by default) — private global memories. Managed as its own git repo. Notes without a project scope live here.
-- **Project vault** (`<git-root>/.mnemonic/`) — project-specific memories committed directly into the project repo. Created on demand when `remember` is called with a `cwd`. Collaborators cloning the project repo get the vault for free.
-
-Routing rules:
-- `cwd` identifies project context; write location is a separate choice.
-- `remember` with `cwd` and `scope: "project"` → writes to the project vault (creates `.mnemonic/` if absent).
-- `remember` with `cwd` and `scope: "global"` → writes to the main vault but keeps the project id/name in frontmatter.
-- If `scope` is omitted, a saved per-project memory policy is used first; otherwise mnemonic falls back to `project` when `cwd` is present.
-- If the policy is `ask`, do not guess. Ask one targeted question with two clear options: `Project vault` (recommended for shared project knowledge) or `Private main vault` (for personal/project-associated notes). Then call `remember` again with the chosen `scope`.
-- `remember` without `cwd` → writes to the main vault as a normal global memory.
-- `recall`, `list`, `get`, `sync`, `reindex` — operate on the project vault first, then the main vault.
-- `relate`/`unrelate`/`forget` — find notes in any vault; commit changes per vault.
-
-The main vault's own git repo is excluded from project-vault detection (`isMainRepo()` guard) so mnemonic's own directory is never treated as a project vault.
+### Routing rules
+- `cwd` identifies project context (separate from write location)
+- `remember` + `scope: "project"` → project vault (creates `.mnemonic/`)
+- `remember` + `scope: "global"` → main vault (keeps project in frontmatter)
+- `scope` omitted → use saved policy or fallback to `project` with `cwd`
+- Policy `ask` → ask: "Project vault" or "Private main vault"
+- `remember` without `cwd` → main vault
+- `recall`, `list`, `get`, `sync`, `reindex` → project vault first, then main
+- `relate`/`unrelate`/`forget` → any vault, commit per vault
+- Main vault's own git repo excluded from detection (`isMainRepo()` guard)
 
 ### Main vault config
-Machine-local runtime settings live in the main vault's `config.json`. Use this for operational tuning and persistent MCP behavior that should survive across sessions without becoming a memory note. This includes `reindexEmbedConcurrency` and per-project memory policy defaults.
+Machine-local settings in `~/mnemonic-vault/config.json`. Survives sessions without becoming memory notes. Includes `reindexEmbedConcurrency`, per-project policy defaults.
 
-### Bidirectional sync with auto-embedding
-`sync` does: fetch → record local HEAD → pull (rebase) → diff `notes/` to find what changed → push → embed any notes that arrived. This is a single tool call that handles the full sync cycle. Rebase is used instead of merge to keep history linear. `sync` always syncs the main vault; pass `cwd` to also sync the project vault.
+### Bidirectional sync
+`sync` does: fetch → record HEAD → pull (rebase) → diff notes/ → push → embed arrivals. Single call, linear history. Syncs main vault; pass `cwd` for project vault too.
 
 ### MCP output style
-This MCP is optimized for direct LLM consumption, so tool outputs should stay text-first.
+Optimized for LLM consumption:
 
-Output rules:
-- Prefer compact, semantically explicit text over structured payloads.
-- Always name both **project association** and **storage location** when both matter.
-- Use stable labels such as `project:`, `stored:`, `policy:`, `updated:` so LLMs can scan reliably.
-- Put the answer first, then supporting detail.
-- Keep lists shallow and grouped by purpose; avoid dumping raw note bodies unless the tool is explicitly for retrieval.
-- Only add structured/non-text responses if repeated LLM failures show that text is insufficient for a specific tool.
+**Output rules:**
+- Compact, semantically explicit text over structured payloads
+- Always name **project association** and **storage location**
+- Use stable labels: `project:`, `stored:`, `policy:`, `updated:`
+- Answer first, then detail
+- Shallow lists grouped by purpose
+- Structured responses only if text fails repeatedly
 
-Token-efficiency rules:
-- Optimize for clarity first, token use second.
-- Keep default responses concise; make extra detail opt-in.
-- Prefer one good summary tool over forcing multiple smaller calls.
-- Avoid repeating the same metadata in multiple sections when one summary line is enough.
-- Compress counts and state into a single line when it stays readable.
-- Do not shorten labels so much that `project`, `stored`, or `policy` become ambiguous.
+**Token-efficiency:**
+- Clarity first, tokens second
+- Concise defaults, opt-in detail
+- One summary tool over multiple calls
+- Compress counts/state into single readable lines
+- Don't over-shorten labels
 
-Formatting rules:
-- Use short headings or lead lines for orientation tools.
-- Use bullets for enumerations and state summaries.
-- Keep wording consistent across tools for `project`, `scope`, `stored`, and `policy`.
-- For distinction-heavy outputs, prefer explicit phrases like `project: mnemonic` and `stored: main-vault` instead of implying one from the other.
+**Formatting:**
+- Short headings for orientation
+- Bullets for enumerations/state
+- Consistent wording for `project`, `scope`, `stored`, `policy`
+- Explicit phrases: `project: mnemonic`, `stored: main-vault`
 
 ## Architecture
 
 ```
-src/index.ts      — MCP server, all tool registrations
+src/index.ts      — MCP server, tool registrations
 src/storage.ts    — read/write notes (markdown) and embeddings (JSON)
-src/embeddings.ts — Ollama HTTP client, cosine similarity
-src/git.ts        — git operations via simple-git, SyncResult type
-src/project.ts    — detect project from cwd via git remote URL
-src/vault.ts      — VaultManager: routing between main vault and project vaults
+src/embeddings.ts — Ollama client, cosine similarity
+src/git.ts        — git operations via simple-git
+src/project.ts    — detect project from git remote URL
+src/vault.ts      — VaultManager: routing between vaults
 ```
 
 ### Key types
@@ -228,61 +147,57 @@ interface Relationship {
   type: RelationshipType;
 }
 
-// A stored memory
 interface Note {
-  id: string;           // slug-uuid e.g. "auth-bug-fix-a1b2c3d4"
+  id: string;           // slug-uuid
   title: string;
   content: string;      // markdown body
   tags: string[];
-  project?: string;     // stable project id e.g. "github-com-acme-myapp"
-  projectName?: string; // human-readable e.g. "myapp"
+  project?: string;     // stable project id
+  projectName?: string; // human-readable
   relatedTo?: Relationship[];
   createdAt: string;    // ISO 8601
   updatedAt: string;
 }
 
-// Local embedding cache
 interface EmbeddingRecord {
   id: string;
-  model: string;        // e.g. "nomic-embed-text"
-  embedding: number[];  // 768-dimensional for nomic-embed-text
+  model: string;
+  embedding: number[];  // 768-dim for nomic-embed-text
   updatedAt: string;
 }
 
-// Returned by git.sync()
 interface SyncResult {
   hasRemote: boolean;
-  pulledNoteIds: string[];   // notes that arrived/changed during pull
-  deletedNoteIds: string[];  // notes deleted on remote
+  pulledNoteIds: string[];
+  deletedNoteIds: string[];
   pushedCommits: number;
 }
 ```
 
 ### Vault layout
 
-**Main vault** (private, `~/mnemonic-vault`):
+**Main vault** (`~/mnemonic-vault`):
 ```
 ~/mnemonic-vault/
-  .gitignore          ← auto-written on startup, contains "embeddings/"
-  notes/
-    <id>.md           ← global memories
-  embeddings/
-    <id>.json         ← local only, never committed
+  .gitignore          ← auto-written, contains "embeddings/"
+  notes/              ← global memories
+    <id>.md
+  embeddings/         ← local only, never committed
+    <id>.json
 ```
 
-**Project vault** (shared, inside the project repo):
+**Project vault** (`<git-root>/.mnemonic/`):
 ```
 <git-root>/
   .mnemonic/
     .gitignore        ← auto-written, contains "embeddings/"
-    notes/
-      <id>.md         ← project memories, committed to the project repo
-    embeddings/
-      <id>.json       ← local only, never committed
+    notes/            ← project memories (committed)
+      <id>.md
+    embeddings/       ← local only, never committed
+      <id>.json
 ```
 
-### Note format
-
+**Note format:**
 ```markdown
 ---
 title: JWT RS256 migration rationale
@@ -298,66 +213,62 @@ createdAt: 2026-03-07T10:00:00.000Z
 updatedAt: 2026-03-07T10:00:00.000Z
 ---
 
-We switched from HS256 to RS256 because...
+Note content...
 ```
 
 ## Tools
 
-| Tool             | Description                                                                    |
-|------------------|--------------------------------------------------------------------------------|
-| `detect_project` | Resolve a `cwd` to a stable project id via git remote URL                     |
-| `remember`       | Write a note + embedding; `cwd` sets project context and `scope` picks storage |
-| `set_project_memory_policy` | Save the default write scope for a project (`project`, `global`, or `ask`) |
-| `get_project_memory_policy` | Show the saved default write scope for a project                |
-| `project_memory_summary` | Summarize what mnemonic currently knows about a project          |
-| `recall`         | Semantic search with optional project boost                                    |
-| `update`         | Update note content/title/tags, always re-embeds                               |
-| `where_is_memory` | Show a note's project association and actual storage location                 |
-| `move_memory`    | Move a note between `main-vault` and `project-vault` without changing its id |
-| `forget`         | Delete note + embedding, git commit + push; cleans up dangling relationships   |
-| `list`           | List notes filtered by project scope/tags/storage, optionally with previews/relations |
-| `get`            | Fetch one or more notes by exact id                                            |
-| `relate`         | Create a typed relationship between two notes (bidirectional by default)       |
-| `unrelate`       | Remove a relationship between two notes                                        |
-| `recent_memories` | Show the most recently updated notes for a scope                              |
-| `memory_graph`   | Show a compact adjacency list of note relationships                            |
-| `sync`           | Bidirectional git sync — pull, push, auto-embed pulled notes                   |
-| `reindex`        | Manually rebuild missing embeddings; `force=true` rebuilds all                 |
+| Tool | Description |
+|------|-------------|
+| `detect_project` | Resolve `cwd` to stable project id via git remote URL |
+| `remember` | Write note + embedding; `cwd` sets context, `scope` picks storage |
+| `set_project_memory_policy` | Save default write scope for project (`project`, `global`, `ask`) |
+| `get_project_memory_policy` | Show saved default write scope |
+| `project_memory_summary` | Summarize what mnemonic knows about a project |
+| `recall` | Semantic search with optional project boost |
+| `update` | Update note content/title/tags, re-embeds always |
+| `where_is_memory` | Show note's project association and storage location |
+| `move_memory` | Move note between vaults without changing id |
+| `forget` | Delete note + embedding, git commit + push, cleanup relationships |
+| `consolidate` | Merge multiple notes into one with relationship to sources |
+| `prune` | Remove superseded notes and clean up relationships |
+| `list` | List notes filtered by scope/tags/storage |
+| `get` | Fetch one or more notes by exact id |
+| `relate` | Create typed relationship between notes (bidirectional) |
+| `unrelate` | Remove relationship between notes |
+| `recent_memories` | Show most recently updated notes for scope |
+| `memory_graph` | Show compact adjacency list of relationships |
+| `sync` | Bidirectional git sync, pull, push, auto-embed pulled notes |
+| `reindex` | Rebuild missing embeddings; `force=true` rebuilds all |
 
 ## Environment variables
 
-| Variable      | Default                  | Description                    |
-|---------------|--------------------------|--------------------------------|
-| `VAULT_PATH`  | `~/mnemonic-vault`       | Vault location                 |
-| `OLLAMA_URL`  | `http://localhost:11434` | Ollama server                  |
-| `EMBED_MODEL` | `nomic-embed-text`       | Embedding model                |
-| `DISABLE_GIT` | `false`                  | Skip all git ops if `"true"`   |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VAULT_PATH` | `~/mnemonic-vault` | Vault location |
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama server |
+| `EMBED_MODEL` | `nomic-embed-text` | Embedding model |
+| `DISABLE_GIT` | `false` | Skip git ops if `"true"` |
 
 ## Stack
 
-- **TypeScript** (Node16 module resolution, ES2022 target)
-- **@modelcontextprotocol/sdk** — MCP server, stdio transport
+- **TypeScript** (Node16, ES2022)
+- **@modelcontextprotocol/sdk** — MCP server
 - **simple-git** — git operations
 - **gray-matter** — markdown frontmatter parsing
-- **zod** — MCP tool input schema validation
-- **Ollama** (external, HTTP) — local embeddings via `nomic-embed-text`
+- **zod** — schema validation
+- **Ollama** (HTTP) — `nomic-embed-text` embeddings
 
-## TypeScript type safety patterns
-
-Use TypeScript's type system to catch errors at compile time and guide refactoring. Prefer patterns that let the compiler verify exhaustiveness.
+## TypeScript patterns
 
 ### Exhaustive switch statements
-
-When branching on union types, use `switch` with exhaustiveness checking. This ensures all cases are handled and causes compile errors when new union members are added.
-
-**Preferred:**
 ```typescript
 switch (consolidationMode) {
   case "delete":
-    // handle delete
+    // handle
     break;
   case "supersedes":
-    // handle supersedes
+    // handle
     break;
   default: {
     const _exhaustive: never = consolidationMode;
@@ -366,79 +277,33 @@ switch (consolidationMode) {
 }
 ```
 
-**Avoid:**
-```typescript
-if (consolidationMode === "delete") {
-  // handle delete
-} else {
-  // Implicitly handles "supersedes" - no compiler verification
-}
-```
-
-The `const _exhaustive: never` pattern forces TypeScript to verify all union members are handled. If a new mode is added to `ConsolidationMode`, the compiler will error until the switch is updated.
-
-### String literal unions vs enums
-
-Use string literal unions for domain values. They're more lightweight and integrate better with object literals and JSON.
-
-**Preferred:**
+### String literal unions
 ```typescript
 type ConsolidationMode = "supersedes" | "delete";
-type RelationshipType = "related-to" | "explains" | "example-of" | "supersedes";
 ```
 
-**Avoid:**
-```typescript
-enum ConsolidationMode {
-  Supersedes = "supersedes",
-  Delete = "delete"
-}
-```
+Prefer over enums — more lightweight, integrates better with JSON.
 
-### Type inference vs explicit types
+### Type inference
+Let TypeScript infer when obvious; explicit types for function boundaries and public APIs.
 
-Let TypeScript infer types when obvious, add explicit types for function boundaries and public APIs.
+### Unknown for dynamic data
+Use `unknown` instead of `any` for external data (APIs, user input). Forces type checking before use.
 
-**Preferred:**
-```typescript
-// Inference is fine here
-const lines: string[] = [];
-lines.push("item");
+## Critical constraints
 
-// Explicit types for function boundaries
-function processMode(mode: ConsolidationMode): string {
-  // ...
-}
-```
+- **One file per note** — git conflict isolation
+- **Embeddings gitignored** — avoid binary merge conflicts; reindex if needed
+- **Rebase on pull** — linear history
+- **Project id from git remote URL** — cross-machine consistency
+- **Similarity boost (not hard filter)** — keep global memories accessible
+- **`simpleGit()` in `GitOps.init()`** — vault must exist first
+- **Project vault in `.mnemonic/`** — shareable via git
+- **`isMainRepo()` guard** — prevent main vault from being treated as project vault
 
-### Unknown type for dynamic data
+## Known limitations
 
-Use `unknown` instead of `any` when receiving data from external sources (APIs, user input). It forces type checking before use.
-
-**Preferred:**
-```typescript
-function processConfig(raw: unknown): Config {
-  if (typeof raw !== "object" || raw === null) {
-    throw new Error("Invalid config");
-  }
-  // ...
-}
-```
-
-## Things not to change without good reason
-
-- **One file per note** — critical for git conflict isolation. Don't aggregate notes into a single file.
-- **Embeddings gitignored** — deliberate. Don't start committing them unless reindex time becomes a real problem and you've added `.gitattributes merge=ours`.
-- **Rebase on pull** — `git pull --rebase` keeps history linear. Don't switch to merge without understanding the tradeoff on a personal vault.
-- **Project id from git remote, not local path** — the normalization in `src/project.ts` is what makes cross-machine consistency work. Local paths differ; remote URLs don't.
-- **Similarity boost, not hard filter** — `recall` boosts project notes rather than excluding global ones. This is intentional: global memories (preferences, patterns) should remain accessible in project context.
-- **`simpleGit()` in `GitOps.init()`, not the constructor** — the vault directory is created by `Storage.init()` which runs after `GitOps` is constructed. Calling `simpleGit()` in the constructor throws `GitConstructError`.
-- **Project vault in `.mnemonic/` inside the project repo** — this makes notes shareable with collaborators via normal git. Don't move them back into the main vault.
-- **`isMainRepo()` guard in `VaultManager`** — prevents the main vault's own git repo from being treated as a project vault. Don't remove it.
-
-## Known limitations and future work
-
-- **Bounded parallel embedding on reindex** — `embedMissingNotes()` runs with a small concurrency limit to speed up large reindexes without flooding Ollama. Increase carefully if local embedding throughput becomes a bottleneck.
-- **No full-text fallback** — if Ollama is down, `recall` fails entirely. A fallback to simple keyword search over note content would improve resilience.
-- **Embedding model mismatch** — if you change `EMBED_MODEL`, existing embeddings are stale. `reindex --force` fixes this but there's no automatic detection. Could check `EmbeddingRecord.model` against current model and re-embed mismatches.
-- **No web UI** — memorizer has one. Out of scope for this project; the vault is just files so any markdown editor works for browsing.
+- **Bounded parallel embedding** — small concurrency limit during reindex
+- **No full-text fallback** — fails if Ollama down (could add keyword search)
+- **Embedding model mismatch** — `reindex --force` fixes; no auto-detection
+- **No web UI** — vault is just files; use any markdown editor
