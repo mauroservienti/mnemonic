@@ -16,8 +16,9 @@ When working on mnemonic itself:
 ### Session start
 
 Before doing any substantive work:
-1. Call `project_memory_summary` (or `recent_memories`) to orient on what's already known.
-2. Call `recall` with a broad query to surface relevant prior context.
+1. Resolve the active project context first; if you are in a repo, treat its absolute working directory as required input for project-scoped memory operations.
+2. Call `project_memory_summary` (or `recent_memories`) with `cwd` to orient on what's already known.
+3. Call `recall` with `cwd` and a broad query to surface relevant prior context.
 
 ### Before capturing
 
@@ -25,6 +26,8 @@ Before calling `remember`:
 1. `recall` first — if a related note exists, call `update` instead to avoid fragmentation.
 2. If you've made several closely-related captures in this session, consider `consolidate` before wrapping up.
 3. Write the note summary-first: put the main fact, decision, or outcome in the opening sentences, then follow with supporting detail.
+4. Pass `cwd` for anything about the current repo, even if you intend to store it in the main vault with `scope: "global"`.
+5. Omit `cwd` only for truly cross-project or personal memories; missing `cwd` makes the note global and unassociated.
 
 ### Capture triggers
 
@@ -145,11 +148,14 @@ When `recall` called with `cwd`, project notes get **+0.15 cosine similarity boo
 
 ### Routing rules
 - `cwd` identifies project context (separate from write location)
+- Treat `cwd` as mandatory for project-specific `remember`, `recall`, `update`, `move_memory`, `get`, `list`, `sync`, and `reindex` calls
 - `remember` + `scope: "project"` → project vault (creates `.mnemonic/`)
 - `remember` + `scope: "global"` → main vault (keeps project in frontmatter)
 - `scope` omitted → use saved policy or fallback to `project` with `cwd`
 - Policy `ask` → ask: "Project vault" or "Private main vault"
 - `remember` without `cwd` → main vault
+- `move_memory` main-vault → project-vault rewrites `project` / `projectName` from `cwd`
+- `move_memory` project-vault → main-vault preserves project association while changing storage
 - `recall`, `list`, `get`, `sync`, `reindex` → project vault first, then main
 - `relate`/`unrelate`/`forget` → any vault, commit per vault
 - Main vault's own git repo excluded from detection (`isMainRepo()` guard)

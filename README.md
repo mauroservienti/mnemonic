@@ -77,6 +77,8 @@ When you call `remember`, `cwd` determines project context and `scope` determine
 - `cwd` + `scope: "global"` -> store in the main vault while keeping the project association in frontmatter
 - no `cwd` -> store in the main vault as a normal global memory
 
+Rule of thumb: if the note is about the current repo, always pass `cwd` even when you want private storage in the main vault. Omitting `cwd` means "this is global and not tied to a project."
+
 You can also set a per-project default once with `set_project_memory_policy`. After that, `remember` uses the saved default whenever `scope` is omitted. Supported defaults are `project`, `global`, and `ask`.
 
 Notes are plain markdown with YAML frontmatter — readable, diffable, mergeable.
@@ -287,7 +289,7 @@ For local development against this repository's current source tree, use `npm ru
 | `list`           | List memories — filter by project scope/tags and optionally include previews, relations, storage, and timestamps |
 | `list_migrations` | List available migrations and show which ones are pending                   |
 | `memory_graph`   | Show a compact adjacency list of memory relationships                           |
-| `move_memory`    | Move a memory between `main-vault` and `project-vault` without changing its id |
+| `move_memory`    | Move a memory between `main-vault` and `project-vault`; moving into a project vault rewrites project association from `cwd`, moving out preserves it |
 | `project_memory_summary` | Summarize what mnemonic knows about the current project                 |
 | `recall`         | Semantic search — project-boosted when `cwd` provided                           |
 | `recent_memories` | Show the most recently updated memories for a scope                            |
@@ -404,7 +406,7 @@ You have access to a long-term memory system via the `mnemonic` MCP server.
 Use it proactively — don't wait to be asked.
 
 ### On every session start (in a project)
-1. Call `detect_project` with the working directory to identify project context.
+1. Call `detect_project` with the working directory and keep that absolute `cwd` for all project-specific memory operations.
 2. Call `project_memory_summary` with `cwd` for a rich overview of what's known, or
    `recall` with a broad query like "project overview architecture decisions" — to
    surface relevant prior context before doing any work.
@@ -415,6 +417,9 @@ Use it proactively — don't wait to be asked.
 Do a quick `recall` first. If a related note exists, call `update` instead — this avoids
 accumulating fragmented notes on the same topic. When several related captures pile up,
 use `consolidate` to merge them into one authoritative note.
+
+Pass `cwd` for anything about the current repo, even if you plan to store it with
+`scope: "global"`. `cwd` sets project association; omitting it creates a truly global note.
 
 ### When to call `remember`
 Store a memory whenever you learn something useful to know in a future session:
@@ -496,6 +501,8 @@ If nothing comes to mind within a few seconds, skip it — don't force links.
 
 ### Scoping rules
 - Pass `cwd` for anything specific to the current project.
+- Pass `cwd` even when storing privately with `scope: "global"`; `cwd` controls project association, `scope` controls storage.
+- Omit `cwd` only for truly cross-project or personal memories.
 - Omit `cwd` for things that apply across all projects (user preferences,
   cross-project patterns, general facts about the user).
 - When recalling, always pass `cwd` if you're in a project — the boost ensures

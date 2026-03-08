@@ -570,11 +570,13 @@ async function formatProjectPolicyLine(projectId?: string): Promise<string> {
 async function moveNoteBetweenVaults(
   found: { note: Note; vault: Vault },
   targetVault: Vault,
-): Promise<void> {
+  noteToWrite?: Note,
+): Promise<Note> {
   const { note, vault: sourceVault } = found;
+  const finalNote = noteToWrite ?? note;
   const embedding = await sourceVault.storage.readEmbedding(note.id);
 
-  await targetVault.storage.writeNote(note);
+  await targetVault.storage.writeNote(finalNote);
   if (embedding) {
     await targetVault.storage.writeEmbedding(embedding);
   }
@@ -586,23 +588,25 @@ async function moveNoteBetweenVaults(
 
   const targetCommitBody = formatCommitBody({
     summary: `Moved from ${sourceVaultLabel} to ${targetVaultLabel}`,
-    noteId: note.id,
-    noteTitle: note.title,
-    projectName: note.projectName,
+    noteId: finalNote.id,
+    noteTitle: finalNote.title,
+    projectName: finalNote.projectName,
   });
-  await targetVault.git.commit(`move: ${note.title}`, [vaultManager.noteRelPath(targetVault, note.id)], targetCommitBody);
+  await targetVault.git.commit(`move: ${finalNote.title}`, [vaultManager.noteRelPath(targetVault, finalNote.id)], targetCommitBody);
 
   const sourceCommitBody = formatCommitBody({
     summary: `Moved to ${targetVaultLabel}`,
-    noteId: note.id,
-    noteTitle: note.title,
-    projectName: note.projectName,
+    noteId: finalNote.id,
+    noteTitle: finalNote.title,
+    projectName: finalNote.projectName,
   });
-  await sourceVault.git.commit(`move: ${note.title}`, [vaultManager.noteRelPath(sourceVault, note.id)], sourceCommitBody);
+  await sourceVault.git.commit(`move: ${finalNote.title}`, [vaultManager.noteRelPath(sourceVault, finalNote.id)], sourceCommitBody);
   await targetVault.git.push();
   if (sourceVault !== targetVault) {
     await sourceVault.git.push();
   }
+
+  return finalNote;
 }
 
 async function removeRelationshipsToNoteIds(noteIds: string[]): Promise<Map<Vault, string[]>> {
@@ -1834,6 +1838,7 @@ server.registerTool(
     }
 
     let targetVault: Vault;
+    let targetProject: Awaited<ReturnType<typeof resolveProject>> | undefined;
     if (target === "main-vault") {
       targetVault = vaultManager.main;
     } else {
@@ -1849,6 +1854,10 @@ server.registerTool(
       if (!projectVault) {
         return { content: [{ type: "text", text: `Could not resolve a project vault for: ${cwd}` }] };
       }
+      targetProject = await resolveProject(cwd);
+      if (!targetProject) {
+        return { content: [{ type: "text", text: `Could not detect a project for: ${cwd}` }] };
+      }
       targetVault = projectVault;
     }
 
@@ -1857,21 +1866,43 @@ server.registerTool(
       return { content: [{ type: "text", text: `Cannot move '${id}' because a note with that id already exists in ${target}.` }] };
     }
 
-    await moveNoteBetweenVaults(found, targetVault);
+    let noteToWrite = found.note;
+    let metadataRewritten = false;
+    if (target === "project-vault" && targetProject) {
+      const rewrittenProject = targetProject.id;
+      const rewrittenProjectName = targetProject.name;
+      metadataRewritten = noteToWrite.project !== rewrittenProject || noteToWrite.projectName !== rewrittenProjectName;
+      noteToWrite = {
+        ...noteToWrite,
+        project: rewrittenProject,
+        projectName: rewrittenProjectName,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    const movedNote = await moveNoteBetweenVaults(found, targetVault, noteToWrite);
+    const associationValue = movedNote.projectName && movedNote.project
+      ? `${movedNote.projectName} (${movedNote.project})`
+      : movedNote.projectName ?? movedNote.project ?? "global";
     
     const structuredContent: MoveResult = {
       action: "moved",
       id,
       fromVault: currentStorage as "project-vault" | "main-vault",
       toVault: target,
-      projectAssociation: found.note.projectName ?? found.note.project ?? "global",
-      title: found.note.title,
+      projectAssociation: associationValue,
+      title: movedNote.title,
+      metadataRewritten,
     };
+
+    const associationText = metadataRewritten
+      ? `Project association is now ${associationValue}.`
+      : `Project association remains ${associationValue}.`;
     
     return {
       content: [{
         type: "text",
-        text: `Moved '${id}' from ${currentStorage} to ${target}. Project association remains ${found.note.projectName ?? found.note.project ?? "global"}.`,
+        text: `Moved '${id}' from ${currentStorage} to ${target}. ${associationText}`,
       }],
       structuredContent,
     };

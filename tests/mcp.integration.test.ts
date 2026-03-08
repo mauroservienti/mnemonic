@@ -71,6 +71,81 @@ describe("local MCP script", () => {
     expect(after).toContain("**remote:** upstream");
     expect(after).toContain("**default id:** `github-com-user-myapp-fork`");
   }, 15000);
+
+  it("rewrites project metadata when moving a global note into a project vault", async () => {
+    const vaultDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-vault-"));
+    const repoDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-project-"));
+    tempDirs.push(vaultDir, repoDir);
+
+    await execFileAsync("git", ["init"], { cwd: repoDir });
+
+    const embeddingServer = await startFakeEmbeddingServer();
+
+    try {
+      const rememberText = await callLocalMcp(vaultDir, "remember", {
+        title: "Unscoped move test",
+        content: "Created without project context so it starts as a global note.",
+        tags: ["integration"],
+        summary: "Create unscoped note for move metadata rewrite test",
+        scope: "global",
+      }, embeddingServer.url);
+
+      const noteId = extractRememberedId(rememberText);
+      const moveText = await callLocalMcp(vaultDir, "move_memory", {
+        id: noteId,
+        target: "project-vault",
+        cwd: repoDir,
+      }, embeddingServer.url);
+
+      expect(moveText).toContain("Project association is now");
+      expect(moveText).toContain("(");
+
+      const movedNote = await readFile(path.join(repoDir, ".mnemonic", "notes", `${noteId}.md`), "utf-8");
+      expect(movedNote).toContain("projectName:");
+      expect(movedNote).toContain("project:");
+      expect(movedNote).toContain("mnemonic-mcp-project-");
+    } finally {
+      await embeddingServer.close();
+    }
+  }, 15000);
+
+  it("preserves project association when moving a project note into the main vault", async () => {
+    const vaultDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-vault-"));
+    const repoDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-project-"));
+    tempDirs.push(vaultDir, repoDir);
+
+    await execFileAsync("git", ["init"], { cwd: repoDir });
+
+    const embeddingServer = await startFakeEmbeddingServer();
+
+    try {
+      const rememberText = await callLocalMcp(vaultDir, "remember", {
+        title: "Project move out test",
+        content: "Created with project context so it should remain project-associated when moved to the main vault.",
+        tags: ["integration"],
+        summary: "Create project note for move-out behavior test",
+        cwd: repoDir,
+        scope: "project",
+      }, embeddingServer.url);
+
+      const noteId = extractRememberedId(rememberText);
+      const moveText = await callLocalMcp(vaultDir, "move_memory", {
+        id: noteId,
+        target: "main-vault",
+        cwd: repoDir,
+      }, embeddingServer.url);
+
+      expect(moveText).toContain("Project association remains");
+      expect(moveText).toContain("(");
+
+      const movedNote = await readFile(path.join(vaultDir, "notes", `${noteId}.md`), "utf-8");
+      expect(movedNote).toContain("projectName:");
+      expect(movedNote).toContain("project:");
+      expect(movedNote).toContain("mnemonic-mcp-project-");
+    } finally {
+      await embeddingServer.close();
+    }
+  }, 15000);
 });
 
 async function callLocalMcp(
