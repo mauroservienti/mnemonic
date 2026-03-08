@@ -12,7 +12,7 @@ tags:
   - testing
   - decisions
 createdAt: '2026-03-08T07:44:07.713Z'
-updatedAt: '2026-03-08T10:35:28.815Z'
+updatedAt: '2026-03-08T10:42:23.592Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
 memoryVersion: 1
@@ -23,6 +23,7 @@ Strengthened migration behavior across multiple sessions.
 
 - `normalizeMemoryVersion()` falls back invalid or missing frontmatter values to `0` so the backfill migration can repair malformed notes safely.
 - `runAllPending()` now warns on partial-error cases, leaves schema versions unchanged when errors occur, and commits successful pending runs once per vault with `config.json` included.
+- Non-dry-run migration execution now stages note writes in a temporary vault-local area and only flushes them to the real notes directory after the whole vault run succeeds.
 
 **Migration ordering guarantee:**
 
@@ -47,6 +48,12 @@ Strengthened migration behavior across multiple sessions.
 - Server startup now emits a stderr warning when loaded vaults have pending migrations and points users at `mnemonic migrate --dry-run`.
 - `registerMigration()` warns when a migration has no version constraints, making accidental always-run migrations visible during development.
 
-**Remaining open item:**
+**Atomic rollback behavior:**
 
-- Partial migration writes still remain on disk after an error; there is no rollback or atomic flush yet, so migrations must stay idempotent and tolerate partially-updated vaults.
+- If a migration reports errors after modifying notes, staged writes are rolled back and never reach the working tree.
+- Schema version is left unchanged and no auto-commit happens for that vault.
+- Tests cover both single-migration execution and `runAllPending()` rollback behavior.
+
+**Remaining watch item:**
+
+- Future migrations still need the checklist discipline to bump `defaultConfig.schemaVersion` whenever a new latest schema version is introduced.
