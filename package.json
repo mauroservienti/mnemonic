@@ -12,6 +12,7 @@
   },
   "files": [
     "build",
+    "CHANGELOG.md",
     "README.md",
     "LICENSE"
   ],
@@ -19,13 +20,14 @@
     "mnemonic": "build/index.js"
   },
   "scripts": {
-    "build": "tsc && chmod 755 build/index.js",
+    "build": "npm run typecheck && tsc && chmod 755 build/index.js",
     "dev": "tsc --watch",
     "mcp:local": "./scripts/mcp-local.sh",
     "prepack": "npm run build",
     "start": "node build/index.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.10.1",
