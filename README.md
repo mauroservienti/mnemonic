@@ -26,7 +26,7 @@ If you want the higher-level system map, see [`ARCHITECTURE.md`](ARCHITECTURE.md
 
 mnemonic is at the inception stage. The storage format (note frontmatter schema, vault layout, config structure) is still stabilizing and **may change in breaking ways** between releases. Migrations are provided when possible, but you should treat your vault as something you can afford to rebuild or re-migrate during this period.
 
-If you adopt it now, keep an eye on the changelog and run `list_migrations` after each update.
+If you adopt it now, keep an eye on the changelog. mnemonic surfaces pending migrations at startup, and `list_migrations` shows pending work per vault after each update.
 
 ## Important caveat
 
@@ -83,7 +83,17 @@ Notes are plain markdown with YAML frontmatter — readable, diffable, mergeable
 Memory content is markdown-linted on `remember`/`update`: fixable issues are auto-corrected before save, and non-fixable issues are rejected.
 Embeddings stay local (gitignored) and are rebuilt on each machine with `reindex`.
 
-Main-vault runtime settings live in `~/mnemonic-vault/config.json`. This now holds both machine-local runtime tuning and per-project memory policies. Today it includes `reindexEmbedConcurrency`, which defaults to `4` and is clamped to the range `1..16`.
+Each vault has its own `config.json` with a `schemaVersion`, so main and project vaults can migrate independently. The main vault config in `~/mnemonic-vault/config.json` also holds machine-local runtime tuning and per-project memory policies. Today it includes `reindexEmbedConcurrency`, which defaults to `4` and is clamped to the range `1..16`.
+
+## Migration behavior
+
+- `list_migrations` reports schema version and pending migrations per vault.
+- Startup warns when a loaded vault is behind, but does not auto-run migrations.
+- `execute_migration` and `mnemonic migrate --dry-run` let you preview changes before applying them.
+- Non-dry-run migrations update a vault's schema only after the full vault run succeeds.
+- Failed migration runs roll staged note writes back instead of leaving partial note edits in the working tree.
+
+If you maintain mnemonic itself and add a new latest-schema migration, bump `defaultConfig.schemaVersion` in `src/config.ts` in the same change so fresh installs start at the current schema.
 
 ## Project scoping
 

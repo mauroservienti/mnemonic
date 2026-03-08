@@ -1002,7 +1002,7 @@
 <div class="early-banner">
   <div class="container">
     <span class="early-icon">&#x26A0;&#xFE0F;</span>
-    <span><strong>Early stage.</strong> The storage format is still stabilizing and may change between releases. Run <code>list_migrations</code> after each update and keep an eye on the changelog.</span>
+    <span><strong>Early stage.</strong> The storage format is still stabilizing and may change between releases. Pending migrations are surfaced automatically; run <code>list_migrations</code> after each update and keep an eye on the changelog.</span>
   </div>
 </div>
 
@@ -1100,6 +1100,11 @@
         <span class="feature-icon">&#x26A1;</span>
         <h3>No always-on service</h3>
         <p>The MCP server starts on demand via stdio. Claude Code, Cursor, and other MCP clients invoke it per-session. Zero background processes when you're not using it.</p>
+      </div>
+      <div class="feature-card fade-up">
+        <span class="feature-icon">&#x1F6E1;&#xFE0F;</span>
+        <h3>Safe schema upgrades</h3>
+        <p>Pending migrations are visible per vault, dry-runs are built in, and failed runs roll staged note writes back instead of leaving half-migrated memories behind.</p>
       </div>
     </div>
   </div>
