@@ -325,6 +325,12 @@ npm test -- <file>          # specific test file
 npm test -- --reporter=verbose  # detailed output
 ```
 
+**Integration test environment**:
+- `tests/mcp.integration.test.ts` must stay CI-safe: it runs the real `scripts/mcp-local.sh` entrypoint with `DISABLE_GIT=true`
+- Do not require a real Ollama daemon in CI for that test; it injects a fake local embeddings endpoint via `OLLAMA_URL`
+- Keep the test isolated to a temp `VAULT_PATH` so it never mutates the developer's real vault or repository state
+- If you add more MCP integration tests, prefer the same pattern unless you explicitly need end-to-end Ollama verification
+
 **Coverage expectations**:
 - Migration code: 100% (users can't fix corrupt vaults easily)
 - Storage read/write: 100% (data integrity is critical)
