@@ -354,6 +354,13 @@ npm test -- --reporter=verbose  # detailed output
 - Keep the test isolated to a temp `VAULT_PATH` so it never mutates the developer's real vault or repository state
 - If you add more MCP integration tests, prefer the same pattern unless you explicitly need end-to-end Ollama verification
 
+**CI failure learning workflow**:
+- CI failure learnings are artifact-first: a failing run should produce a normalized artifact before anything is promoted into memory
+- Promotion into mnemonic is manual via `workflow_dispatch`, not automatic on every failed run
+- Avoid fixed notes for CI learnings; prefer one note per promoted incident or failure pattern
+- Promoted CI learnings should include a stable `failure_signature` so repeated issues can be recognized later
+- Do not make CI failure learning depend on a real Ollama daemon unless semantic clustering becomes a proven need
+
 **Coverage expectations**:
 - Migration code: 100% (users can't fix corrupt vaults easily)
 - Storage read/write: 100% (data integrity is critical)

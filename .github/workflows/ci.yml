@@ -25,4 +25,23 @@ jobs:
         run: npm run build
 
       - name: Run tests
-        run: npm test
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/ci-learning
+          npm test 2>&1 | tee artifacts/ci-learning/test-output.log
+
+      - name: Summarize failed test run
+        if: failure()
+        run: |
+          node scripts/ci/collect-test-failure.mjs \
+            --input artifacts/ci-learning/test-output.log \
+            --outdir artifacts/ci-learning \
+            --command "npm test"
+
+      - name: Upload CI learning artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-learning
+          path: artifacts/ci-learning
