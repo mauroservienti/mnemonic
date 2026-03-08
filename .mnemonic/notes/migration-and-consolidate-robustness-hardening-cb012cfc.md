@@ -12,7 +12,7 @@ tags:
   - testing
   - decisions
 createdAt: '2026-03-08T07:44:07.713Z'
-updatedAt: '2026-03-08T10:42:23.592Z'
+updatedAt: '2026-03-08T10:43:30.946Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
 memoryVersion: 1
@@ -54,6 +54,6 @@ Strengthened migration behavior across multiple sessions.
 - Schema version is left unchanged and no auto-commit happens for that vault.
 - Tests cover both single-migration execution and `runAllPending()` rollback behavior.
 
-**Remaining watch item:**
+**Migration checklist:**
 
-- Future migrations still need the checklist discipline to bump `defaultConfig.schemaVersion` whenever a new latest schema version is introduced.
+- When adding a new latest-schema migration, bump `defaultConfig.schemaVersion` in `src/config.ts` at the same time so fresh installs start at the current schema.
