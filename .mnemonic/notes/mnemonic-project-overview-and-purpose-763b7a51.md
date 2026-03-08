@@ -6,7 +6,7 @@ tags:
   - mcp
   - typescript
 createdAt: '2026-03-07T17:58:49.005Z'
-updatedAt: '2026-03-07T20:51:25.039Z'
+updatedAt: '2026-03-08T13:08:05.469Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
 relatedTo:
@@ -22,7 +22,9 @@ memoryVersion: 1
 ---
 A personal MCP memory server backed by plain markdown + JSON files, synced via git. No database, no permanent services.
 
-**Core idea:** store notes as `.md` files with YAML frontmatter in a git repo, compute embeddings locally via Ollama (`nomic-embed-text`), expose everything through an MCP server that MCP clients (Claude Code, Cursor, etc.) spawn on demand via stdio.
+**Core idea:** store notes as `.md` files with YAML frontmatter in a git repo, compute embeddings locally via Ollama (`nomic-embed-text-v2-moe` by default), expose everything through an MCP server that MCP clients (Claude Code, Cursor, etc.) spawn on demand via stdio.
+
+**Embedding transport:** `src/embeddings.ts` uses Ollama's `/api/embed` endpoint with truncation enabled so longer notes still embed safely with the v2 model.
 
 **Stack:** TypeScript, Node.js, `@modelcontextprotocol/sdk`, `simple-git`, `gray-matter`, `zod`, Ollama (external HTTP).
 
