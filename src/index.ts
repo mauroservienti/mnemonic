@@ -1594,10 +1594,35 @@ server.registerTool(
   async ({ ids, cwd }) => {
     const sections: string[] = [];
     const missing: string[] = [];
+    const foundNotes: Array<{
+      id: string;
+      title: string;
+      content: string;
+      project?: string;
+      projectName?: string;
+      tags: string[];
+      relatedTo?: Array<{ id: string; type: RelationshipType }>;
+      createdAt: string;
+      updatedAt: string;
+      vault: "project-vault" | "main-vault";
+    }> = [];
+    
     for (const id of ids) {
       const found = await vaultManager.findNote(id, cwd);
       if (found) {
         sections.push(formatNote(found.note));
+        foundNotes.push({
+          id: found.note.id,
+          title: found.note.title,
+          content: found.note.content,
+          project: found.note.project,
+          projectName: found.note.projectName,
+          tags: found.note.tags,
+          relatedTo: found.note.relatedTo,
+          createdAt: found.note.createdAt,
+          updatedAt: found.note.updatedAt,
+          vault: found.vault.isProject ? "project-vault" : "main-vault",
+        });
       } else {
         missing.push(id);
       }
@@ -1605,7 +1630,15 @@ server.registerTool(
     const parts: string[] = [];
     if (sections.length > 0) parts.push(sections.join("\n\n---\n\n"));
     if (missing.length > 0) parts.push(`Not found: ${missing.map((id) => `\`${id}\``).join(", ")}`);
-    return { content: [{ type: "text", text: parts.join("\n\n") }] };
+    
+    const structuredContent: GetResult = {
+      action: "got",
+      count: foundNotes.length,
+      notes: foundNotes,
+      notFound: missing,
+    };
+    
+    return { content: [{ type: "text", text: parts.join("\n\n") }], structuredContent };
   }
 );
 
