@@ -13,6 +13,29 @@ When working on mnemonic itself:
 - Exercise features through MCP tools (`remember`, `update`, `get`, `relate`, `recall`)
 - Mnemoize decisions and findings through MCP (never write `.mnemonic/` files directly)
 
+### Capture triggers
+
+Default to capturing important context through MCP without waiting to be reminded. In particular, capture when any of the following happens:
+
+- A design or implementation decision is made and there is a clear "why"
+- A bug, CI failure, portability issue, or environment trap is discovered
+- A workaround or temporary constraint is introduced
+- A plan is explicitly accepted, rejected, narrowed, or deferred
+- Dogfooding reveals behavior that differs from assumptions
+- New testing or CI conventions are established
+- A migration, data-shape, or operational constraint is clarified
+
+### End-of-task memory check
+
+Before finishing substantial work on mnemonic, quickly check:
+
+- What should future work remember about this change?
+- Was any option deliberately rejected and why?
+- Did CI, local dogfooding, or production-like use reveal a non-obvious lesson?
+- Is there a new convention that should be documented in memory or `AGENT.md`?
+
+If the answer to any of these is yes, capture it through MCP before wrapping up.
+
 **Troubleshooting:** Complex JSON payloads may fail via stdio due to shell escaping. Write to temp file first:
 ```bash
 cat > /tmp/request.json << 'JSON'
