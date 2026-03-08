@@ -16,12 +16,12 @@
       --bg-surface:  #0d0d1a;
       --bg-card:     rgba(255,255,255,0.03);
       --border:      rgba(255,255,255,0.07);
-      --border-glow: rgba(124,58,237,0.35);
+      --border-glow: rgba(74,222,128,0.3);
       --text:        #e2e8f0;
       --text-muted:  #64748b;
       --text-dim:    #94a3b8;
-      --primary:     #7c3aed;
-      --primary-lt:  #a78bfa;
+      --primary:     #4ade80;
+      --primary-lt:  #86efac;
       --cyan:        #06b6d4;
       --cyan-lt:     #67e8f9;
       --green:       #10b981;
@@ -61,7 +61,7 @@
     }
     .bg-blob-1 {
       width: 600px; height: 600px;
-      background: radial-gradient(circle, rgba(124,58,237,0.12) 0%, transparent 70%);
+      background: radial-gradient(circle, rgba(74,222,128,0.1) 0%, transparent 70%);
       top: -200px; left: -200px;
     }
     .bg-blob-2 {
@@ -71,7 +71,7 @@
     }
     .bg-blob-3 {
       width: 400px; height: 400px;
-      background: radial-gradient(circle, rgba(124,58,237,0.06) 0%, transparent 70%);
+      background: radial-gradient(circle, rgba(74,222,128,0.05) 0%, transparent 70%);
       top: 60%; left: 40%;
     }
 
@@ -150,7 +150,7 @@
 
     .nav-cta:hover {
       border-color: var(--border-glow);
-      background: rgba(124,58,237,0.08) !important;
+      background: rgba(74,222,128,0.07) !important;
       color: var(--text) !important;
     }
 
@@ -166,8 +166,8 @@
       gap: 8px;
       padding: 6px 14px;
       border-radius: 999px;
-      border: 1px solid rgba(124,58,237,0.3);
-      background: rgba(124,58,237,0.08);
+      border: 1px solid rgba(74,222,128,0.25);
+      background: rgba(74,222,128,0.07);
       font-size: 0.8rem;
       color: var(--primary-lt);
       margin-bottom: 32px;
@@ -198,7 +198,7 @@
 
     .hero h1 .brand {
       font-family: 'JetBrains Mono', monospace;
-      background: linear-gradient(135deg, #a78bfa 0%, #06b6d4 100%);
+      background: linear-gradient(135deg, #4ade80 0%, #86efac 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
@@ -234,14 +234,14 @@
 
     .btn-primary {
       background: var(--primary);
-      color: #fff;
+      color: #0a1a0f;
       border: 1px solid transparent;
     }
 
     .btn-primary:hover {
-      background: #6d28d9;
+      background: #22c55e;
       transform: translateY(-1px);
-      box-shadow: 0 8px 24px rgba(124,58,237,0.35);
+      box-shadow: 0 8px 24px rgba(74,222,128,0.3);
     }
 
     .btn-ghost {
@@ -267,7 +267,7 @@
       max-width: 780px;
       margin-left: auto;
       margin-right: auto;
-      box-shadow: 0 32px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(124,58,237,0.1);
+      box-shadow: 0 32px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(74,222,128,0.08);
     }
 
     .terminal-bar {
@@ -367,13 +367,13 @@
       position: absolute;
       top: 0; left: 0; right: 0;
       height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(124,58,237,0.4), transparent);
+      background: linear-gradient(90deg, transparent, rgba(74,222,128,0.35), transparent);
       opacity: 0;
       transition: opacity 0.3s;
     }
 
     .feature-card:hover {
-      border-color: rgba(124,58,237,0.3);
+      border-color: rgba(74,222,128,0.25);
       transform: translateY(-2px);
       box-shadow: 0 16px 40px rgba(0,0,0,0.3);
     }
@@ -432,7 +432,7 @@
       font-weight: 500;
     }
 
-    .vault-pill.main    { background: rgba(124,58,237,0.15); color: var(--primary-lt); }
+    .vault-pill.main    { background: rgba(74,222,128,0.12); color: var(--primary-lt); }
     .vault-pill.project { background: rgba(6,182,212,0.12);  color: var(--cyan-lt); }
 
     .vault-card h3 {
@@ -548,8 +548,8 @@
     }
 
     .tool-chip:hover {
-      border-color: rgba(124,58,237,0.25);
-      background: rgba(124,58,237,0.04);
+      border-color: rgba(74,222,128,0.2);
+      background: rgba(74,222,128,0.04);
     }
 
     .tool-name {
@@ -819,7 +819,7 @@
     }
 
     .dogfood-card:hover {
-      border-color: rgba(124,58,237,0.25);
+      border-color: rgba(74,222,128,0.2);
       box-shadow: 0 12px 32px rgba(0,0,0,0.25);
     }
 
@@ -841,9 +841,9 @@
       border-radius: 999px;
       font-size: 0.7rem;
       font-family: 'JetBrains Mono', monospace;
-      background: rgba(124,58,237,0.1);
+      background: rgba(74,222,128,0.08);
       color: var(--primary-lt);
-      border: 1px solid rgba(124,58,237,0.2);
+      border: 1px solid rgba(74,222,128,0.18);
     }
 
     .dogfood-id {
@@ -891,8 +891,8 @@
       font-style: italic;
       color: var(--text-muted) !important;
       padding: 8px 12px;
-      border-left: 2px solid rgba(124,58,237,0.3);
-      background: rgba(124,58,237,0.04);
+      border-left: 2px solid rgba(74,222,128,0.25);
+      background: rgba(74,222,128,0.04);
       border-radius: 0 4px 4px 0;
     }
 
@@ -1110,7 +1110,7 @@
       <h3>Recall flow &mdash; project-boosted semantic search</h3>
       <div class="flow-steps">
         <div class="flow-step">
-          <div class="flow-step-box" style="border-color:rgba(124,58,237,0.3);color:var(--primary-lt)">recall query</div>
+          <div class="flow-step-box" style="border-color:rgba(74,222,128,0.25);color:var(--primary-lt)">recall query</div>
           <div class="flow-step-label">your search</div>
         </div>
         <div class="flow-arrow">&#x2192;</div>
