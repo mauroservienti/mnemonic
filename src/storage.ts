@@ -179,7 +179,15 @@ export class Storage {
       relatedTo: parsed.data["relatedTo"] as Relationship[] | undefined,
       createdAt: parsed.data["createdAt"] ?? new Date().toISOString(),
       updatedAt: parsed.data["updatedAt"] ?? new Date().toISOString(),
-      memoryVersion: (parsed.data["memoryVersion"] as number | undefined) ?? 0,
+      memoryVersion: normalizeMemoryVersion(parsed.data["memoryVersion"]),
     };
   }
+}
+
+function normalizeMemoryVersion(value: unknown): number {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 1) {
+    return value;
+  }
+
+  return 0;
 }

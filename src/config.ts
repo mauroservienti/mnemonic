@@ -15,6 +15,15 @@ const defaultConfig: MnemonicConfig = {
   projectMemoryPolicies: {},
 };
 
+function normalizeSchemaVersion(value: unknown): string {
+  if (typeof value !== "string") {
+    return defaultConfig.schemaVersion;
+  }
+
+  const trimmed = value.trim();
+  return /^\d+(\.\d+)*$/.test(trimmed) ? trimmed : defaultConfig.schemaVersion;
+}
+
 function normalizeConcurrency(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return defaultConfig.reindexEmbedConcurrency;
@@ -45,12 +54,18 @@ export class MnemonicConfigStore {
     await this.writeAll(config);
   }
 
+  async setSchemaVersion(schemaVersion: string): Promise<void> {
+    const config = await this.readAll();
+    config.schemaVersion = normalizeSchemaVersion(schemaVersion);
+    await this.writeAll(config);
+  }
+
   private async readAll(): Promise<MnemonicConfig> {
     try {
       const raw = await fs.readFile(this.filePath, "utf-8");
       const parsed = JSON.parse(raw) as Partial<MnemonicConfig>;
       return {
-        schemaVersion: parsed.schemaVersion ?? defaultConfig.schemaVersion,
+        schemaVersion: normalizeSchemaVersion(parsed.schemaVersion),
         reindexEmbedConcurrency: normalizeConcurrency(parsed.reindexEmbedConcurrency),
         projectMemoryPolicies: parsed.projectMemoryPolicies ?? {},
       };

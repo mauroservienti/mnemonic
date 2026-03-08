@@ -9,6 +9,7 @@ import { promises as fs } from "fs";
 import { Storage, type Note, type Relationship, type RelationshipType } from "./storage.js";
 import { embed, cosineSimilarity, embedModel } from "./embeddings.js";
 import { type SyncResult } from "./git.js";
+import { filterRelationships, mergeRelationshipsFromNotes, normalizeMergePlanSourceIds } from "./consolidate.js";
 import { cleanMarkdown } from "./markdown.js";
 import { MnemonicConfigStore } from "./config.js";
 import {
@@ -543,6 +544,36 @@ async function moveNoteBetweenVaults(
   }
 }
 
+async function removeRelationshipsToNoteIds(noteIds: string[]): Promise<Map<Vault, string[]>> {
+  const vaultChanges = new Map<Vault, string[]>();
+
+  for (const vault of vaultManager.allKnownVaults()) {
+    const notes = await vault.storage.listNotes();
+    for (const note of notes) {
+      const filtered = filterRelationships(note.relatedTo, noteIds);
+      if (filtered === note.relatedTo) {
+        continue;
+      }
+
+      await vault.storage.writeNote({
+        ...note,
+        relatedTo: filtered,
+      });
+      addVaultChange(vaultChanges, vault, vaultManager.noteRelPath(vault, note.id));
+    }
+  }
+
+  return vaultChanges;
+}
+
+function addVaultChange(vaultChanges: Map<Vault, string[]>, vault: Vault, file: string): void {
+  const files = vaultChanges.get(vault) ?? [];
+  if (!files.includes(file)) {
+    files.push(file);
+    vaultChanges.set(vault, files);
+  }
+}
+
 // ── MCP Server ────────────────────────────────────────────────────────────────
 
 const server = new McpServer({
@@ -665,7 +696,7 @@ server.registerTool(
       }
       
       if (!dryRun) {
-        lines.push("⚠️  Migration executed - remember to commit changes in your vaults!");
+        lines.push("Migration executed. Modified vaults were auto-committed and pushed when git was available.");
       } else {
         lines.push("✓ Dry-run completed - no changes made");
       }
@@ -1017,23 +1048,10 @@ server.registerTool(
     await noteVault.storage.deleteNote(id);
 
     // Clean up dangling references grouped by vault so we make one commit per vault
-    const vaultChanges = new Map<Vault, string[]>();
+    const vaultChanges = await removeRelationshipsToNoteIds([id]);
 
     // Always include the deleted note's path (git add on a deleted file stages the removal)
-    const noteVaultFiles = vaultChanges.get(noteVault) ?? [];
-    noteVaultFiles.push(vaultManager.noteRelPath(noteVault, id));
-    vaultChanges.set(noteVault, noteVaultFiles);
-
-    for (const v of vaultManager.allKnownVaults()) {
-      const notes = await v.storage.listNotes();
-      const referencers = notes.filter((n) => n.relatedTo?.some((r) => r.id === id));
-      for (const ref of referencers) {
-        await v.storage.writeNote({ ...ref, relatedTo: ref.relatedTo!.filter((r) => r.id !== id) });
-        const files = vaultChanges.get(v) ?? [];
-        files.push(vaultManager.noteRelPath(v, ref.id));
-        vaultChanges.set(v, files);
-      }
-    }
+    addVaultChange(vaultChanges, noteVault, vaultManager.noteRelPath(noteVault, id));
 
     for (const [v, files] of vaultChanges) {
       const isPrimaryVault = v === noteVault;
@@ -1650,7 +1668,7 @@ server.registerTool(
   },
   async ({ cwd, strategy, mode, threshold, mergePlan }) => {
     const project = await resolveProject(cwd);
-    if (!project && strategy !== "dry-run") {
+    if (!project && cwd) {
       return { content: [{ type: "text", text: `Could not detect a project for: ${cwd}` }] };
     }
 
@@ -1918,7 +1936,17 @@ async function executeMerge(
   project: Awaited<ReturnType<typeof resolveProject>>,
   cwd?: string,
 ): Promise<{ content: Array<{ type: "text"; text: string }> }> {
-  const { sourceIds, targetTitle, description, summary, tags } = mergePlan;
+  const sourceIds = normalizeMergePlanSourceIds(mergePlan.sourceIds);
+  const targetTitle = mergePlan.targetTitle.trim();
+  const { description, summary, tags } = mergePlan;
+
+  if (sourceIds.length < 2) {
+    return { content: [{ type: "text", text: "execute-merge requires at least two distinct sourceIds." }] };
+  }
+
+  if (!targetTitle) {
+    return { content: [{ type: "text", text: "execute-merge requires a non-empty targetTitle." }] };
+  }
 
   // Find all source entries
   const sourceEntries: NoteEntry[] = [];
@@ -1954,14 +1982,7 @@ async function executeMerge(
 
   // Collect all unique relationships from sources (excluding relationships among sources)
   const sourceIdsSet = new Set(sourceIds);
-  const allRelationships: Relationship[] = [];
-  for (const entry of sourceEntries) {
-    for (const rel of entry.note.relatedTo ?? []) {
-      if (!sourceIdsSet.has(rel.id) && !allRelationships.some((r) => r.id === rel.id)) {
-        allRelationships.push(rel);
-      }
-    }
-  }
+  const allRelationships = mergeRelationshipsFromNotes(sourceEntries.map((entry) => entry.note), sourceIdsSet);
 
   // Create consolidated note
   const targetId = makeId(targetTitle);
@@ -2001,9 +2022,14 @@ async function executeMerge(
       // Delete all sources
       for (const entry of sourceEntries) {
         await entry.vault.storage.deleteNote(entry.note.id);
-        const files = vaultChanges.get(entry.vault) ?? [];
-        files.push(vaultManager.noteRelPath(entry.vault, entry.note.id));
-        vaultChanges.set(entry.vault, files);
+        addVaultChange(vaultChanges, entry.vault, vaultManager.noteRelPath(entry.vault, entry.note.id));
+      }
+
+      const cleanupChanges = await removeRelationshipsToNoteIds(sourceIds);
+      for (const [vault, files] of cleanupChanges) {
+        for (const file of files) {
+          addVaultChange(vaultChanges, vault, file);
+        }
       }
       break;
     }
@@ -2019,9 +2045,7 @@ async function executeMerge(
           relatedTo: updatedRels,
           updatedAt: now,
         });
-        const files = vaultChanges.get(entry.vault) ?? [];
-        files.push(vaultManager.noteRelPath(entry.vault, entry.note.id));
-        vaultChanges.set(entry.vault, files);
+        addVaultChange(vaultChanges, entry.vault, vaultManager.noteRelPath(entry.vault, entry.note.id));
       }
       break;
     }
@@ -2032,9 +2056,7 @@ async function executeMerge(
   }
 
   // Add consolidated note to changes
-  const targetFiles = vaultChanges.get(targetVault) ?? [];
-  targetFiles.push(vaultManager.noteRelPath(targetVault, targetId));
-  vaultChanges.set(targetVault, targetFiles);
+  addVaultChange(vaultChanges, targetVault, vaultManager.noteRelPath(targetVault, targetId));
 
   // Commit changes per vault
   for (const [vault, files] of vaultChanges) {
@@ -2147,9 +2169,14 @@ async function pruneSuperseded(
     lines.push(`  - ${entry.note.title} (${id}) -> superseded by ${targetId}`);
 
     await entry.vault.storage.deleteNote(id);
-    const files = vaultChanges.get(entry.vault) ?? [];
-    files.push(vaultManager.noteRelPath(entry.vault, id));
-    vaultChanges.set(entry.vault, files);
+    addVaultChange(vaultChanges, entry.vault, vaultManager.noteRelPath(entry.vault, id));
+  }
+
+  const cleanupChanges = await removeRelationshipsToNoteIds(Array.from(supersededIds));
+  for (const [vault, files] of cleanupChanges) {
+    for (const file of files) {
+      addVaultChange(vaultChanges, vault, file);
+    }
   }
 
   // Commit changes per vault

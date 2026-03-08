@@ -42,4 +42,22 @@ describe("MnemonicConfigStore", () => {
     });
   });
 
+  it("falls back to the default schema version for invalid config values", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mnemonic-config-"));
+    tempDirs.push(dir);
+
+    await fs.writeFile(
+      path.join(dir, "config.json"),
+      JSON.stringify({ schemaVersion: "vNext" }, null, 2),
+      "utf-8"
+    );
+
+    const store = new MnemonicConfigStore(dir);
+    await expect(store.load()).resolves.toEqual({
+      schemaVersion: "1.0",
+      reindexEmbedConcurrency: 4,
+      projectMemoryPolicies: {},
+    });
+  });
+
 });

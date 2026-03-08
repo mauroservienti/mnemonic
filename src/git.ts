@@ -1,5 +1,13 @@
 import { simpleGit, SimpleGit } from "simple-git";
 
+export class GitOperationError extends Error {
+  constructor(operation: "commit" | "push", cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super(`Git ${operation} failed: ${detail}`);
+    this.name = "GitOperationError";
+  }
+}
+
 export interface SyncResult {
   hasRemote: boolean;
   /** Note ids that arrived or changed during pull (need re-embedding) */
@@ -57,8 +65,8 @@ export class GitOps {
    * - Mode: <mode> (for consolidation)
    * - Files: <file1>, <file2>
    */
-  async commit(message: string, files: string[], body?: string): Promise<void> {
-    if (!this.enabled) return;
+  async commit(message: string, files: string[], body?: string): Promise<boolean> {
+    if (!this.enabled) return false;
     try {
       if (files.length > 0) {
         await this.git.add(files);
@@ -66,7 +74,7 @@ export class GitOps {
         await this.git.add(`${this.notesRelDir}/`);
       }
       const status = await this.git.status();
-      if (status.staged.length === 0) return;
+      if (status.staged.length === 0) return false;
 
       // Build commit message with optional body
       const fullMessage = body ? `${message}\n\n${body}` : message;
@@ -74,8 +82,10 @@ export class GitOps {
 
       const displayMessage = body ? `${message} [...]` : message;
       console.error(`[git] Committed: ${displayMessage}`);
+      return true;
     } catch (err) {
       console.error(`[git] Commit failed: ${err}`);
+      throw new GitOperationError("commit", err);
     }
   }
 
@@ -123,6 +133,7 @@ export class GitOps {
       console.error("[git] Pushed");
     } catch (err) {
       console.error(`[git] Push failed: ${err}`);
+      throw new GitOperationError("push", err);
     }
   }
 

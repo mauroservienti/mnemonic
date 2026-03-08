@@ -1,5 +1,6 @@
 import type { Vault, VaultManager } from "./vault.js";
 import type { Note } from "./storage.js";
+import { MnemonicConfigStore } from "./config.js";
 
 export interface MigrationResult {
   notesProcessed: number;
@@ -19,12 +20,18 @@ export interface Migration {
 
 export class Migrator {
   private migrations: Map<string, Migration> = new Map();
+  private readonly configStore: MnemonicConfigStore;
 
   constructor(private vaultManager: VaultManager) {
+    this.configStore = new MnemonicConfigStore(vaultManager.main.storage.vaultPath);
     this.registerBuiltInMigrations();
   }
 
   registerMigration(migration: Migration): void {
+    if (this.migrations.has(migration.name)) {
+      throw new Error(`Migration already registered: ${migration.name}`);
+    }
+
     this.migrations.set(migration.name, migration);
   }
 
@@ -35,12 +42,14 @@ export class Migrator {
   async getPendingMigrations(currentSchemaVersion: string, targetSchemaVersion?: string): Promise<Migration[]> {
     const all = this.listAvailableMigrations();
     const current = this.parseVersion(currentSchemaVersion);
+    const target = targetSchemaVersion ? this.parseVersion(targetSchemaVersion) : undefined;
     
     return all.filter(mig => {
       // Primary filter: maxSchemaVersion means "this migration upgrades TO this version"
       // Run if current < max, don't run if current >= max
       if (mig.maxSchemaVersion) {
         const max = this.parseVersion(mig.maxSchemaVersion);
+        if (target && this.compareVersions(max, target) > 0) return false;
         if (this.compareVersions(current, max) >= 0) return false;
         return true;
       }
@@ -49,6 +58,7 @@ export class Migrator {
       // Run if current < min (haven't reached that version yet)
       if (mig.minSchemaVersion) {
         const min = this.parseVersion(mig.minSchemaVersion);
+        if (target && this.compareVersions(min, target) > 0) return false;
         if (this.compareVersions(current, min) < 0) return true;
         return false;
       }
@@ -112,33 +122,35 @@ export class Migrator {
     migrationResults: Map<string, { migration: string; result: MigrationResult }[]>;
     vaultsProcessed: number;
   }> {
-    const configStore = this.vaultManager.main.storage.vaultPath + "/config.json";
-    const configPath = configStore.split("/config.json")[0] + "/config.json";
-    const fs = await import("fs/promises");
-    const path = await import("path");
-    
-    const configData = await fs.readFile(path.resolve(configPath), "utf-8").catch(() => null);
-    const config = configData ? JSON.parse(configData) : { schemaVersion: "0.1" };
-    const currentVersion = config.schemaVersion || "0.1";
-
+    const config = await this.configStore.load();
+    const currentVersion = config.schemaVersion;
     const pending = await this.getPendingMigrations(currentVersion);
     const migrationResults = new Map<string, { migration: string; result: MigrationResult }[]>();
 
-    const vaults: Vault[] = options.cwd 
-      ? [await this.vaultManager.getProjectVaultIfExists(options.cwd)].filter(Boolean) as Vault[]
-      : this.vaultManager.allKnownVaults();
-
-    for (const vault of vaults) {
-      const vaultResults: { migration: string; result: MigrationResult }[] = [];
-      migrationResults.set(vault.storage.vaultPath, vaultResults);
-
-      for (const migration of pending) {
-        const result = await migration.run(vault, options.dryRun);
+    for (const migration of pending) {
+      const { results } = await this.runMigration(migration.name, options);
+      for (const [vaultPath, result] of results) {
+        const vaultResults = migrationResults.get(vaultPath) ?? [];
         vaultResults.push({ migration: migration.name, result });
+        migrationResults.set(vaultPath, vaultResults);
       }
     }
 
-    return { migrationResults, vaultsProcessed: vaults.length };
+    const vaultsProcessed = options.cwd
+      ? (await this.vaultManager.getProjectVaultIfExists(options.cwd) ? 1 : 0)
+      : this.vaultManager.allKnownVaults().length;
+
+    const shouldAdvanceSchemaVersion =
+      !options.dryRun &&
+      !options.cwd &&
+      pending.length > 0 &&
+      !hasMigrationFailures(migrationResults);
+
+    if (shouldAdvanceSchemaVersion) {
+      await this.configStore.setSchemaVersion(this.getLatestSchemaVersion(currentVersion, pending));
+    }
+
+    return { migrationResults, vaultsProcessed };
   }
 
   private registerBuiltInMigrations(): void {
@@ -146,6 +158,10 @@ export class Migrator {
   }
 
   private parseVersion(version: string): number[] {
+    if (!/^\d+(\.\d+)*$/.test(version)) {
+      throw new Error(`Invalid schema version: ${version}`);
+    }
+
     return version.split(".").map(n => parseInt(n, 10));
   }
 
@@ -157,6 +173,35 @@ export class Migrator {
     }
     return 0;
   }
+
+  private getLatestSchemaVersion(currentSchemaVersion: string, migrations: Migration[]): string {
+    let latest = currentSchemaVersion;
+
+    for (const migration of migrations) {
+      const candidate = migration.maxSchemaVersion ?? migration.minSchemaVersion;
+      if (!candidate) {
+        continue;
+      }
+
+      if (this.compareVersions(this.parseVersion(candidate), this.parseVersion(latest)) > 0) {
+        latest = candidate;
+      }
+    }
+
+    return latest;
+  }
+}
+
+function hasMigrationFailures(
+  migrationResults: Map<string, { migration: string; result: MigrationResult }[]>
+): boolean {
+  for (const results of migrationResults.values()) {
+    if (results.some(({ result }) => result.errors.length > 0)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function createV010BackfillMemoryVersionMigration(): Migration {

@@ -30,6 +30,7 @@ describe("Migrator", () => {
     vaultManager = {
       main: vault,
       allKnownVaults: vi.fn().mockReturnValue([vault]),
+      getProjectVaultIfExists: vi.fn().mockResolvedValue(vault),
     } as unknown as VaultManager;
 
     migrator = new Migrator(vaultManager);
@@ -75,6 +76,19 @@ tags: []
 createdAt: 2026-01-01T00:00:00.000Z
 updatedAt: 2026-01-01T00:00:00.000Z
 memoryVersion: 1
+---
+
+Content of ${title}`;
+      await fs.writeFile(path.join(tempDir, "notes", `${id}.md`), content, "utf-8");
+    };
+
+    const writeInvalidVersionNote = async (id: string, title: string) => {
+      const content = `---
+title: ${title}
+tags: []
+createdAt: 2026-01-01T00:00:00.000Z
+updatedAt: 2026-01-01T00:00:00.000Z
+memoryVersion: nope
 ---
 
 Content of ${title}`;
@@ -137,6 +151,21 @@ Content of ${title}`;
       
       expect(result.notesProcessed).toBe(1);
       expect(result.notesModified).toBe(0);
+    });
+
+    it("should repair invalid memoryVersion values", async () => {
+      await writeInvalidVersionNote("bad-note", "Bad Note");
+
+      const migration = migrator.listAvailableMigrations()
+        .find(m => m.name === "v0.1.0-backfill-memory-versions")!;
+
+      const result = await migration.run(vault, false);
+
+      expect(result.notesProcessed).toBe(1);
+      expect(result.notesModified).toBe(1);
+
+      const note = await storage.readNote("bad-note");
+      expect(note?.memoryVersion).toBe(1);
     });
 
     it("should handle multiple notes mixed old and new", async () => {
@@ -230,14 +259,76 @@ Test content`;
     });
   });
 
+  describe("runAllPending", () => {
+    beforeEach(async () => {
+      await fs.mkdir(path.join(tempDir, "notes"), { recursive: true });
+      await fs.writeFile(
+        path.join(tempDir, "config.json"),
+        JSON.stringify({ schemaVersion: "0.0", reindexEmbedConcurrency: 4, projectMemoryPolicies: {} }, null, 2),
+        "utf-8"
+      );
+
+      const content = `---
+title: Test Note
+tags: []
+createdAt: 2026-01-01T00:00:00.000Z
+updatedAt: 2026-01-01T00:00:00.000Z
+---
+
+Test content`;
+      await fs.writeFile(path.join(tempDir, "notes", "test-note.md"), content, "utf-8");
+    });
+
+    it("persists the latest schema version after successful execution", async () => {
+      const commitSpy = vi.spyOn(vault.git, "commit").mockResolvedValue();
+      const pushSpy = vi.spyOn(vault.git, "push").mockResolvedValue();
+
+      const result = await migrator.runAllPending({ dryRun: false });
+
+      expect(result.vaultsProcessed).toBe(1);
+      expect(commitSpy).toHaveBeenCalled();
+      expect(pushSpy).toHaveBeenCalled();
+
+      const config = JSON.parse(await fs.readFile(path.join(tempDir, "config.json"), "utf-8")) as {
+        schemaVersion: string;
+      };
+      expect(config.schemaVersion).toBe("1.0");
+    });
+
+    it("does not persist schema version during dry-run", async () => {
+      await migrator.runAllPending({ dryRun: true });
+
+      const config = JSON.parse(await fs.readFile(path.join(tempDir, "config.json"), "utf-8")) as {
+        schemaVersion: string;
+      };
+      expect(config.schemaVersion).toBe("0.0");
+    });
+
+    it("does not advance global schema version for cwd-scoped runs", async () => {
+      vi.spyOn(vault.git, "commit").mockResolvedValue();
+      vi.spyOn(vault.git, "push").mockResolvedValue();
+
+      await migrator.runAllPending({ dryRun: false, cwd: tempDir });
+
+      const config = JSON.parse(await fs.readFile(path.join(tempDir, "config.json"), "utf-8")) as {
+        schemaVersion: string;
+      };
+      expect(config.schemaVersion).toBe("0.0");
+    });
+  });
+
   describe("Version comparison", () => {
-    const migratorAny = new Migrator(vaultManager);
-    
     it("should correctly compare version strings", async () => {
+      const migratorAny = new Migrator(vaultManager);
       expect(await migratorAny.getPendingMigrations("0.0")).toHaveLength(1);
       expect(await migratorAny.getPendingMigrations("0.9")).toHaveLength(1);
       expect(await migratorAny.getPendingMigrations("1.0")).toHaveLength(0);
       expect(await migratorAny.getPendingMigrations("1.1")).toHaveLength(0);
+    });
+
+    it("rejects invalid schema versions", async () => {
+      const migratorAny = new Migrator(vaultManager);
+      await expect(migratorAny.getPendingMigrations("v1")).rejects.toThrow("Invalid schema version: v1");
     });
   });
 });
