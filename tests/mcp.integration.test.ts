@@ -146,6 +146,104 @@ describe("local MCP script", () => {
       await embeddingServer.close();
     }
   }, 15000);
+
+  it("updates an existing memory through the MCP and persists the edited content", async () => {
+    const vaultDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-vault-"));
+    tempDirs.push(vaultDir);
+    const embeddingServer = await startFakeEmbeddingServer();
+
+    try {
+      const rememberText = await callLocalMcp(vaultDir, "remember", {
+        title: "Initial integration note",
+        content: "Original content for update flow.",
+        tags: ["integration", "original"],
+        summary: "Create note for MCP update test",
+        scope: "global",
+      }, embeddingServer.url);
+
+      const noteId = extractRememberedId(rememberText);
+      const updateText = await callLocalMcp(vaultDir, "update", {
+        id: noteId,
+        title: "Updated integration note",
+        content: "Updated content for update flow.",
+        tags: ["integration", "updated"],
+        summary: "Verify MCP update persists content changes",
+      }, embeddingServer.url);
+
+      expect(updateText).toContain(`Updated memory '${noteId}'`);
+
+      const notePath = path.join(vaultDir, "notes", `${noteId}.md`);
+      const embeddingPath = path.join(vaultDir, "embeddings", `${noteId}.json`);
+      const noteContents = await readFile(notePath, "utf-8");
+
+      expect(noteContents).toContain("title: Updated integration note");
+      expect(noteContents).toContain("Updated content for update flow.");
+      expect(noteContents).toContain("- integration");
+      expect(noteContents).toContain("- updated");
+      await expect(stat(embeddingPath)).resolves.toBeDefined();
+    } finally {
+      await embeddingServer.close();
+    }
+  }, 15000);
+
+  it("cleans related notes when forgetting a linked memory", async () => {
+    const vaultDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-vault-"));
+    tempDirs.push(vaultDir);
+    const embeddingServer = await startFakeEmbeddingServer();
+
+    try {
+      const firstRemember = await callLocalMcp(vaultDir, "remember", {
+        title: "First linked note",
+        content: "First note in relation test.",
+        tags: ["integration"],
+        summary: "Create first note for relate and forget test",
+        scope: "global",
+      }, embeddingServer.url);
+      const secondRemember = await callLocalMcp(vaultDir, "remember", {
+        title: "Second linked note",
+        content: "Second note in relation test.",
+        tags: ["integration"],
+        summary: "Create second note for relate and forget test",
+        scope: "global",
+      }, embeddingServer.url);
+
+      const firstId = extractRememberedId(firstRemember);
+      const secondId = extractRememberedId(secondRemember);
+
+      const relateText = await callLocalMcp(vaultDir, "relate", {
+        fromId: firstId,
+        toId: secondId,
+        type: "related-to",
+      }, embeddingServer.url);
+      expect(relateText).toContain(`Linked \`${firstId}\` ↔ \`${secondId}\` (related-to)`);
+
+      const beforeForget = await readFile(path.join(vaultDir, "notes", `${secondId}.md`), "utf-8");
+      expect(beforeForget).toContain(firstId);
+
+      const forgetText = await callLocalMcp(vaultDir, "forget", { id: firstId }, embeddingServer.url);
+      expect(forgetText).toContain(`Forgotten '${firstId}'`);
+
+      await expect(stat(path.join(vaultDir, "notes", `${firstId}.md`))).rejects.toThrow();
+      const survivor = await readFile(path.join(vaultDir, "notes", `${secondId}.md`), "utf-8");
+      expect(survivor).not.toContain(firstId);
+      expect(survivor).toContain("Second linked note");
+    } finally {
+      await embeddingServer.close();
+    }
+  }, 15000);
+
+  it("reports sync status cleanly when git syncing is disabled", async () => {
+    const vaultDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-vault-"));
+    const repoDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-project-"));
+    tempDirs.push(vaultDir, repoDir);
+
+    await execFileAsync("git", ["init"], { cwd: repoDir });
+
+    const syncText = await callLocalMcp(vaultDir, "sync", { cwd: repoDir });
+
+    expect(syncText).toContain("main vault: no remote configured");
+    expect(syncText).toContain("project vault: no .mnemonic/ found — skipped.");
+  }, 15000);
 });
 
 async function callLocalMcp(
