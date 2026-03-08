@@ -1359,10 +1359,14 @@ Use it proactively — don't wait to be asked.
 
 <span class="cmt">### On every session start (in a project)</span>
 <span class="num">1.</span> Call `detect_project` with the working directory.
-<span class="num">2.</span> Call `recall` with a broad query like "project overview architecture"
-   and `cwd` set — to surface relevant prior context.
+<span class="num">2.</span> Call `project_memory_summary` with `cwd` for a rich overview, or
+   `recall` with a broad query like "project overview architecture".
 <span class="num">3.</span> If the user mentions something you don't recognize, call `recall`
    before asking them to explain.
+
+<span class="cmt">### Before calling `remember`</span>
+`recall` first — if a related note exists, `update` it instead.
+When 3+ notes on the same topic accumulate, use `consolidate`.
 
 <span class="cmt">### When to call `remember`</span>
 Store a memory whenever you learn something useful for a future session:

@@ -372,10 +372,16 @@ Use it proactively — don't wait to be asked.
 
 ### On every session start (in a project)
 1. Call `detect_project` with the working directory to identify project context.
-2. Call `recall` with a broad query like "project overview architecture decisions"
-   and `cwd` set — to surface relevant prior context before doing any work.
+2. Call `project_memory_summary` with `cwd` for a rich overview of what's known, or
+   `recall` with a broad query like "project overview architecture decisions" — to
+   surface relevant prior context before doing any work.
 3. If the user mentions something you don't recognize, call `recall` before asking
    them to explain — you may already know it.
+
+### Before calling `remember`
+Do a quick `recall` first. If a related note exists, call `update` instead — this avoids
+accumulating fragmented notes on the same topic. When several related captures pile up,
+use `consolidate` to merge them into one authoritative note.
 
 ### When to call `remember`
 Store a memory whenever you learn something useful to know in a future session:
@@ -427,26 +433,31 @@ If nothing comes to mind within a few seconds, skip it — don't force links.
 - Don't forget things just because they're old — outdated context can still be
   useful if clearly dated.
 
-### Working with relationships
-- After `recall`, check the `related:` line in each result. Call `get` with those ids
-  to pull in the linked context before acting — you may already have the answer.
-- Prefer `supersedes` over `forget` when the old memory has historical value.
-- Don't over-link. One or two meaningful edges per note is better than linking everything.
-
 ### When to call `consolidate`
 - When you notice duplicate or highly similar memories from repeated `remember` calls
 - When a cluster of related notes should become one comprehensive note
-- When you want to clean up the memory graph and reduce fragmentation
+- When a feature or bug arc is complete and incremental captures can be synthesized
 
 **Consolidation modes:**
-- `supersedes` (default) — Creates a new consolidated note and marks sources with `supersedes` relationship. Preserves history, allows pruning later.
+- `supersedes` (default) — Creates a new consolidated note and marks sources with `supersedes` relationship. Preserves history, allows pruning later with `prune-superseded`.
 - `delete` — Creates a new consolidated note and deletes sources. Clean and immediate.
 
 **Workflow:**
 1. Run `consolidate` with `strategy: "dry-run"` to see analysis
 2. Review `suggest-merges` output for actionable recommendations
 3. Execute a merge with `strategy: "execute-merge"` and a `mergePlan`
-4. Later, use `prune-superseded` to clean up old notes if using `supersedes` mode
+4. Optionally run `consolidate` with `strategy: "prune-superseded"` to clean up old notes
+
+### Memory hygiene
+- Use `memory_graph` to spot dense clusters of related notes — these are consolidation candidates.
+- Use `recent_memories` or `project_memory_summary` to orient before a session and catch stale notes.
+- Prefer `update` over `remember` when a note already covers the topic. Prefer `consolidate` when 3+ notes on the same topic have accumulated.
+
+### Working with relationships
+- After `recall`, check the `related:` line in each result. Call `get` with those ids
+  to pull in the linked context before acting — you may already have the answer.
+- Prefer `supersedes` over `forget` when the old memory has historical value.
+- Don't over-link. One or two meaningful edges per note is better than linking everything.
 
 ### Scoping rules
 - Pass `cwd` for anything specific to the current project.

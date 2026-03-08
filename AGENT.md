@@ -13,6 +13,18 @@ When working on mnemonic itself:
 - Exercise features through MCP tools (`remember`, `update`, `get`, `relate`, `recall`)
 - Mnemoize decisions and findings through MCP (never write `.mnemonic/` files directly)
 
+### Session start
+
+Before doing any substantive work:
+1. Call `project_memory_summary` (or `recent_memories`) to orient on what's already known.
+2. Call `recall` with a broad query to surface relevant prior context.
+
+### Before capturing
+
+Before calling `remember`:
+1. `recall` first — if a related note exists, call `update` instead to avoid fragmentation.
+2. If you've made several closely-related captures in this session, consider `consolidate` before wrapping up.
+
 ### Capture triggers
 
 Default to capturing important context through MCP without waiting to be reminded. In particular, capture when any of the following happens:
@@ -35,6 +47,15 @@ Before finishing substantial work on mnemonic, quickly check:
 - Is there a new convention that should be documented in memory or `AGENT.md`?
 
 If the answer to any of these is yes, capture it through MCP before wrapping up.
+
+### Memory hygiene
+
+Consolidate when:
+- 3+ notes on the same topic have accumulated from incremental captures
+- A feature or bug arc is complete and related notes can be synthesized into one
+- `memory_graph` shows a dense cluster of tightly-related nodes
+
+Use `consolidate` strategy `supersedes` to preserve source history (sources remain with `supersedes` relationship, cleanable later via `prune-superseded`); use `delete` to remove sources immediately.
 
 ### Documentation upkeep
 
@@ -90,7 +111,7 @@ Human-readable summary.
 | `relate` | `relate: <title1> ↔ <title2>` | Context of relationship | Summary, Note, Project, Relationship |
 | `unrelate` | `unrelate: <id1> ↔ <id2>` | Context of removal | Summary, Note, Project |
 | `consolidate` | `consolidate(<mode>): <title>` | `mergePlan.summary` or "Consolidated N notes" | Summary, Note(s), Project, Mode |
-| `prune` | `prune: removed N superseded note(s)` | "Pruned N superseded notes" | Summary, Note(s) |
+| `consolidate` (prune-superseded) | `prune: removed N superseded note(s)` | "Pruned N superseded notes" | Summary, Note(s) |
 | `policy` | `policy: <project> default scope <scope>` | "Set default scope to X" | Summary, Project |
 
 **LLM summary format:** Imperative mood, 50-72 chars, explain "why" not "what".
@@ -190,7 +211,6 @@ Keep these high-level anchors in mind:
 | `memory_graph` | Show compact adjacency list of relationships |
 | `move_memory` | Move note between vaults without changing id |
 | `project_memory_summary` | Summarize what mnemonic knows about a project |
-| `prune` | Remove superseded notes and clean up relationships |
 | `recall` | Semantic search with optional project boost |
 | `recent_memories` | Show most recently updated notes for scope |
 | `reindex` | Rebuild missing embeddings; `force=true` rebuilds all |
