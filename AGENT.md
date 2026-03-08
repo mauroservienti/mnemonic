@@ -218,28 +218,32 @@ Note content...
 
 ## Tools
 
+⚠️ **When adding new tools**: Always document them in both the Tools table below AND in README.md. Keep the tables in sync and sorted alphabetically.
+
 | Tool | Description |
 |------|-------------|
+| `consolidate` | Merge multiple notes into one with relationship to sources |
 | `detect_project` | Resolve `cwd` to stable project id via git remote URL |
-| `remember` | Write note + embedding; `cwd` sets context, `scope` picks storage |
-| `set_project_memory_policy` | Save default write scope for project (`project`, `global`, `ask`) |
+| `execute_migration` | Execute a named migration (supports dry-run) |
+| `forget` | Delete note + embedding, git commit + push, cleanup relationships |
+| `get` | Fetch one or more notes by exact id |
 | `get_project_memory_policy` | Show saved default write scope |
+| `list` | List notes filtered by scope/tags/storage |
+| `list_migrations` | List available migrations and pending count |
+| `memory_graph` | Show compact adjacency list of relationships |
+| `move_memory` | Move note between vaults without changing id |
 | `project_memory_summary` | Summarize what mnemonic knows about a project |
+| `prune` | Remove superseded notes and clean up relationships |
 | `recall` | Semantic search with optional project boost |
+| `recent_memories` | Show most recently updated notes for scope |
+| `reindex` | Rebuild missing embeddings; `force=true` rebuilds all |
+| `remember` | Write note + embedding; `cwd` sets context, `scope` picks storage |
+| `relate` | Create typed relationship between notes (bidirectional) |
+| `set_project_memory_policy` | Save default write scope for project (`project`, `global`, `ask`) |
+| `sync` | Bidirectional git sync, pull, push, auto-embed pulled notes |
+| `unrelate` | Remove relationship between notes |
 | `update` | Update note content/title/tags, re-embeds always |
 | `where_is_memory` | Show note's project association and storage location |
-| `move_memory` | Move note between vaults without changing id |
-| `forget` | Delete note + embedding, git commit + push, cleanup relationships |
-| `consolidate` | Merge multiple notes into one with relationship to sources |
-| `prune` | Remove superseded notes and clean up relationships |
-| `list` | List notes filtered by scope/tags/storage |
-| `get` | Fetch one or more notes by exact id |
-| `relate` | Create typed relationship between notes (bidirectional) |
-| `unrelate` | Remove relationship between notes |
-| `recent_memories` | Show most recently updated notes for scope |
-| `memory_graph` | Show compact adjacency list of relationships |
-| `sync` | Bidirectional git sync, pull, push, auto-embed pulled notes |
-| `reindex` | Rebuild missing embeddings; `force=true` rebuilds all |
 
 ## Environment variables
 
@@ -289,6 +293,62 @@ Let TypeScript infer when obvious; explicit types for function boundaries and pu
 
 ### Unknown for dynamic data
 Use `unknown` instead of `any` for external data (APIs, user input). Forces type checking before use.
+
+## Testing Requirements
+
+### Data format changes MUST have tests
+Any change to note format, frontmatter schema, config structure, or relationships requires corresponding tests:
+
+- **New frontmatter fields**: Test reading old notes without the field (should default), test writing new notes (include field), test migration path if needed
+- **Field renames**: Test migration that renames field, test both old and new field names during transition period
+- **New note versions**: Test `parseNote()` handles missing `memoryVersion` gracefully 
+- **Config changes**: Test `MnemonicConfigStore` handles old configs, validates new fields
+- **Relationship changes**: Test bidirectional consistency, cleanup on `forget`, validation of types
+
+**Migration testing pattern** (see `tests/migration.test.ts`):
+- Test dry-run mode shows correct changes
+- Test execute mode modifies notes correctly
+- Test idempotency (re-running doesn't break already-migrated notes)
+- Test version comparison logic for all version schemes (0.1, 0.2, 1.0, etc.)
+- Test error handling for malformed data
+- Test per-vault isolation (project vault succeeds, main vault fails = OK)
+
+**Test files mirrored to source structure**:
+- `src/storage.ts` → `tests/storage.test.ts` (doesn't exist yet, add when needed)
+- `src/vault.ts` → `tests/vault.test.ts`
+- `src/migration.ts` → `tests/migration.test.ts`
+
+**Running tests**:
+```bash
+npm test                    # all tests
+npm test -- <file>          # specific test file
+npm test -- --reporter=verbose  # detailed output
+```
+
+**Coverage expectations**:
+- Migration code: 100% (users can't fix corrupt vaults easily)
+- Storage read/write: 100% (data integrity is critical)
+- Vault routing: 90%+ (core to correct note storage/retrieval)
+- Frontmatter parsing: 100% (must handle malformed gracefully)
+
+### Dogfooding required
+Every data format change must be applied to mnemonic's own `.mnemonic/` vault before merging:
+1. Implement change with tests
+2. Run migration in dry-run mode
+3. Execute actual migration
+4. Verify notes correctly updated
+5. Commit the migrated notes (shows real-world impact)
+
+### Documentation for new tools
+All new MCP tools MUST be documented in both AGENT.md and README.md:
+
+- Add to Tools table in **AGENT.md** (keep alphabetically sorted)
+- Add to Tools table in **README.md** (keep alphabetically sorted)
+- Document all parameters in AGENT.md with clear types and descriptions
+- Update example usage in README.md if applicable
+- Run `npm test` to ensure no regressions
+
+**Keep README.md and AGENT.md in sync** - they serve different audiences (README.md for users, AGENT.md for agents/developers).
 
 ## Critical constraints
 

@@ -1,5 +1,23 @@
 # Plan
 
+## ✅ Data format robustness and migration strategy
+
+**Status: Implemented and dogfooded**
+
+The migration framework is fully implemented and tested. All 20 notes in mnemonic's project vault have been migrated to include `memoryVersion: 1`.
+
+**Key decisions already in place**:
+- Schema version tracking at vault level (`schemaVersion: "1.0"`)
+- Note format versioning (`memoryVersion: 1` in frontmatter)
+- Explicit migration command with `--dry-run` support
+- Automatic git commits of migrated files (only modified files, not all changes)
+- Two-level versioning: semver for vault, integers for note format
+- Strong encouragement to use `--dry-run` before executing
+
+**See memory note**: `mnemonic-migration-strategy-7f2e8c3d.md` for full implementation details
+
+## Dynamic project context loading
+
 ## Dynamic project context loading
 
 Idea: add runtime support for loading and unloading active project context so mnemonic can stay simple at small scale while handling larger numbers of projects and memories more efficiently.

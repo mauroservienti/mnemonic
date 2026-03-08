@@ -4,11 +4,13 @@ import path from "path";
 import type { ProjectMemoryPolicy } from "./project-memory-policy.js";
 
 export interface MnemonicConfig {
+  schemaVersion: string;
   reindexEmbedConcurrency: number;
   projectMemoryPolicies: Record<string, ProjectMemoryPolicy>;
 }
 
 const defaultConfig: MnemonicConfig = {
+  schemaVersion: "1.0",
   reindexEmbedConcurrency: 4,
   projectMemoryPolicies: {},
 };
@@ -48,6 +50,7 @@ export class MnemonicConfigStore {
       const raw = await fs.readFile(this.filePath, "utf-8");
       const parsed = JSON.parse(raw) as Partial<MnemonicConfig>;
       return {
+        schemaVersion: parsed.schemaVersion ?? defaultConfig.schemaVersion,
         reindexEmbedConcurrency: normalizeConcurrency(parsed.reindexEmbedConcurrency),
         projectMemoryPolicies: parsed.projectMemoryPolicies ?? {},
       };

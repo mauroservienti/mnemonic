@@ -245,25 +245,27 @@ If you prefer a fixed installed version, point your MCP client at the local bina
 
 | Tool             | Description                                                                     |
 |------------------|---------------------------------------------------------------------------------|
+| `consolidate`    | Analyze and consolidate memories — detect duplicates, suggest merges, execute with `supersedes` (default) or `delete` mode |
 | `detect_project` | Identify the project for a given `cwd` (git remote → slug)                     |
-| `remember`       | Store a memory with project context from `cwd` and storage controlled by `scope` |
-| `set_project_memory_policy` | Set the default write scope and consolidation mode for a project |
+| `execute_migration` | Execute a named migration on vault notes (supports dry-run)                 |
+| `forget`         | Delete a memory by id; cleans up dangling relationships automatically           |
+| `get`            | Fetch one or more memories by exact id                                          |
 | `get_project_memory_policy` | Show the saved default write scope for a project                    |
+| `list`           | List memories — filter by project scope/tags and optionally include previews, relations, storage, and timestamps |
+| `list_migrations` | List available migrations and show which ones are pending                   |
+| `memory_graph`   | Show a compact adjacency list of memory relationships                           |
+| `move_memory`    | Move a memory between `main-vault` and `project-vault` without changing its id |
 | `project_memory_summary` | Summarize what mnemonic knows about the current project                 |
 | `recall`         | Semantic search — project-boosted when `cwd` provided                           |
+| `recent_memories` | Show the most recently updated memories for a scope                            |
+| `reindex`        | Manually rebuild missing embeddings (sync does this automatically)              |
+| `relate`         | Create a typed relationship between two memories (bidirectional by default)     |
+| `remember`       | Store a memory with project context from `cwd` and storage controlled by `scope` |
+| `set_project_memory_policy` | Set the default write scope and consolidation mode for a project |
+| `sync`           | Bidirectional sync — pulls remote, pushes local commits, auto-embeds new notes  |
+| `unrelate`       | Remove a relationship between two memories                                      |
 | `update`         | Update content, title, or tags; `cwd` helps locate project notes                |
 | `where_is_memory` | Show a memory's project association and actual storage location                |
-| `move_memory`    | Move a memory between `main-vault` and `project-vault` without changing its id |
-| `forget`         | Delete a memory by id; cleans up dangling relationships automatically           |
-| `list`           | List memories — filter by project scope/tags and optionally include previews, relations, storage, and timestamps |
-| `get`            | Fetch one or more memories by exact id                                          |
-| `relate`         | Create a typed relationship between two memories (bidirectional by default)     |
-| `unrelate`       | Remove a relationship between two memories                                      |
-| `recent_memories` | Show the most recently updated memories for a scope                            |
-| `memory_graph`   | Show a compact adjacency list of memory relationships                           |
-| `sync`           | Bidirectional sync — pulls remote, pushes local commits, auto-embeds new notes  |
-| `reindex`        | Manually rebuild missing embeddings (sync does this automatically)              |
-| `consolidate`    | Analyze and consolidate memories — detect duplicates, suggest merges, execute with `supersedes` (default) or `delete` mode |
 
 ## Relationships
 

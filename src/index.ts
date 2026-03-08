@@ -25,6 +25,128 @@ import {
 import { classifyTheme, summarizePreview, titleCaseTheme } from "./project-introspection.js";
 import { detectProject } from "./project.js";
 import { VaultManager, type Vault } from "./vault.js";
+import { Migrator } from "./migration.js";
+
+// ── CLI Migration Command ─────────────────────────────────────────────────────
+
+if (process.argv[2] === "migrate") {
+  const VAULT_PATH = process.env["VAULT_PATH"]
+    ? path.resolve(process.env["VAULT_PATH"])
+    : path.join(process.env["HOME"] ?? "~", "mnemonic-vault");
+
+  async function runMigrationCli() {
+    const cwd = process.cwd();
+    const argv = process.argv.slice(3);
+    
+    if (argv.includes("--help") || argv.includes("-h")) {
+      console.log(`
+Mnemonic Migration Tool
+
+Usage:
+  mnemonic migrate [options]
+
+Options:
+  --dry-run     Show what would change without modifying files (STRONGLY RECOMMENDED)
+  --cwd=<path>  Limit migration to specific project vault (/path/to/project)
+  --list        Show available migrations and pending count
+  --help        Show this help message
+
+Workflow:
+  1. Always use --dry-run first to see what will change
+  2. Review the output carefully
+  3. Run without --dry-run to execute and auto-commit
+
+Examples:
+  # Step 1: See what would change
+  mnemonic migrate --dry-run
+  
+  # Step 2: Review, then execute (auto-commits changes)
+  mnemonic migrate
+
+  # For a specific project
+  mnemonic migrate --dry-run --cwd=/path/to/project
+  mnemonic migrate --cwd=/path/to/project
+`);
+      return;
+    }
+    
+    const dryRun = argv.includes("--dry-run");
+    const cwdOption = argv.find(arg => arg.startsWith("--cwd="));
+    const targetCwd = cwdOption ? cwdOption.split("=")[1] : undefined;
+
+    const vaultManager = new VaultManager(VAULT_PATH);
+    await vaultManager.initMain();
+    
+    const migrator = new Migrator(vaultManager);
+
+    if (argv.includes("--list")) {
+      const migrations = migrator.listAvailableMigrations();
+      console.log("Available migrations:");
+      migrations.forEach(m => console.log(`  ${m.name}: ${m.description}`));
+      
+      const configStore = new MnemonicConfigStore(VAULT_PATH);
+      const config = await configStore.load();
+      const pending = await migrator.getPendingMigrations(config.schemaVersion);
+      console.log(`\nSchema version: ${config.schemaVersion}`);
+      console.log(`Pending migrations: ${pending.length}`);
+      
+      if (dryRun && pending.length > 0) {
+        console.log("\n💡 Run without --dry-run to execute these migrations");
+        console.log("   Changes will be automatically committed and pushed");
+      }
+      return;
+    }
+
+    if (dryRun) {
+      console.log("Running migrations in dry-run mode...");
+    } else {
+      console.log("⚠️  Executing migrations (changes will be committed and pushed)...");
+      console.log("   Use --dry-run first if you want to preview changes\n");
+    }
+
+    const { migrationResults, vaultsProcessed } = await migrator.runAllPending(
+      { dryRun, cwd: targetCwd }
+    );
+
+    for (const [vaultPath, results] of migrationResults) {
+      console.log(`\nVault: ${vaultPath}`);
+      for (const { migration, result } of results) {
+        console.log(`  Migration ${migration}:`);
+        console.log(`    Notes processed: ${result.notesProcessed}`);
+        console.log(`    Notes modified: ${result.notesModified}`);
+        if (!dryRun && result.notesModified > 0) {
+          console.log(`    Auto-committed: ${result.warnings.length === 0 ? "✓" : "⚠ (see warnings)"}`);
+        }
+        if (result.errors.length > 0) {
+          console.log(`    Errors: ${result.errors.length}`);
+          result.errors.forEach(e => console.log(`      - ${e.noteId}: ${e.error}`));
+        }
+        if (result.warnings.length > 0) {
+          console.log(`    Warnings: ${result.warnings.length}`);
+          result.warnings.forEach(w => console.log(`      - ${w}`));
+        }
+      }
+    }
+    
+    if (!dryRun && vaultsProcessed > 0) {
+      console.log("\n✓ Migration completed");
+      console.log("Changes have been automatically committed and pushed.");
+    } else if (dryRun) {
+      console.log("\n✓ Dry-run completed - no changes made");
+      if (vaultsProcessed > 0) {
+        console.log("\n💡 Ready to execute? Run: mnemonic migrate");
+      }
+    }
+  }
+
+  runMigrationCli().catch(err => {
+    console.error("Migration failed:", err);
+    process.exit(1);
+  });
+
+  // Wait for async operations to complete
+  await new Promise(() => {});
+}
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -461,6 +583,105 @@ server.registerTool(
   }
 );
 
+// ── list_migrations ───────────────────────────────────────────────────────────
+const migrator = new Migrator(vaultManager);
+
+server.registerTool(
+  "list_migrations",
+  {
+    title: "List Migrations",
+    description: "List available migrations and show which ones are pending for the current schema version",
+    inputSchema: z.object({}),
+  },
+  async () => {
+    const config = await configStore.load();
+    const available = migrator.listAvailableMigrations();
+    const pending = await migrator.getPendingMigrations(config.schemaVersion);
+    
+    const lines: string[] = [];
+    lines.push(`Schema version: ${config.schemaVersion}`);
+    lines.push(`Pending migrations: ${pending.length}`);
+    lines.push("")
+    lines.push("Available migrations:");
+    
+    for (const migration of available) {
+      const isPending = pending.some(p => p.name === migration.name);
+      const marker = isPending ? " *" : "  ";
+      lines.push(`${marker} ${migration.name}`);
+      lines.push(`   ${migration.description}`);
+    }
+    
+    lines.push("");
+    if (pending.length > 0) {
+      lines.push("Run migration with: mnemonic migrate (CLI) or execute_migration (MCP)");
+    }
+    
+    return { content: [{ type: "text", text: lines.join("\n") }] };
+  }
+);
+
+// ── execute_migration ─────────────────────────────────────────────────────────
+server.registerTool(
+  "execute_migration",
+  {
+    title: "Execute Migration",
+    description: "Execute a named migration on vault notes",
+    inputSchema: z.object({
+      migrationName: z.string().describe("Name of the migration to execute"),
+      dryRun: z.boolean().default(true).describe("If true, show what would change without actually modifying notes"),
+      backup: z.boolean().default(true).describe("If true, warn about backing up before real migration"),
+      cwd: projectParam.optional().describe("Optional: limit to project vault for given working directory"),
+    }),
+  },
+  async ({ migrationName, dryRun, backup, cwd }) => {
+    try {
+      const { results, vaultsProcessed } = await migrator.runMigration(migrationName, {
+        dryRun,
+        backup,
+        cwd,
+      });
+      
+      const lines: string[] = [];
+      lines.push(`Migration: ${migrationName}`);
+      lines.push(`Mode: ${dryRun ? "DRY-RUN" : "EXECUTE"}`);
+      lines.push(`Vaults processed: ${vaultsProcessed}`);
+      lines.push("")
+      
+      for (const [vaultPath, result] of results) {
+        lines.push(`Vault: ${vaultPath}`);
+        lines.push(`  Notes processed: ${result.notesProcessed}`);
+        lines.push(`  Notes modified: ${result.notesModified}`);
+        
+        if (result.errors.length > 0) {
+          lines.push(`  Errors: ${result.errors.length}`);
+          result.errors.forEach(e => lines.push(`    - ${e.noteId}: ${e.error}`));
+        }
+        
+        if (result.warnings.length > 0) {
+          lines.push(`  Warnings: ${result.warnings.length}`);
+          result.warnings.forEach(w => lines.push(`    - ${w}`));
+        }
+        lines.push("");
+      }
+      
+      if (!dryRun) {
+        lines.push("⚠️  Migration executed - remember to commit changes in your vaults!");
+      } else {
+        lines.push("✓ Dry-run completed - no changes made");
+      }
+      
+      return { content: [{ type: "text", text: lines.join("\n") }] };
+    } catch (err) {
+      return {
+        content: [{
+          type: "text",
+          text: `Migration failed: ${err instanceof Error ? err.message : String(err)}`,
+        }],
+      };
+    }
+  }
+);
+
 // ── remember ──────────────────────────────────────────────────────────────────
 server.registerTool(
   "remember",
@@ -501,6 +722,7 @@ server.registerTool(
       projectName: project?.name,
       createdAt: now,
       updatedAt: now,
+      memoryVersion: 1,
     };
 
     await vault.storage.writeNote(note);

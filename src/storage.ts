@@ -21,6 +21,8 @@ export interface Note {
   relatedTo?: Relationship[];
   createdAt: string;
   updatedAt: string;
+  /** Schema version for forward compatibility (0 = pre-v0.2.0) */
+  memoryVersion?: number;
 }
 
 export interface EmbeddingRecord {
@@ -62,6 +64,9 @@ export class Storage {
     }
     if (note.relatedTo && note.relatedTo.length > 0) {
       frontmatter["relatedTo"] = note.relatedTo;
+    }
+    if (note.memoryVersion !== undefined) {
+      frontmatter["memoryVersion"] = note.memoryVersion;
     }
     const fileContent = matter.stringify(note.content, frontmatter);
     await fs.writeFile(this.notePath(note.id), fileContent, "utf-8");
@@ -174,6 +179,7 @@ export class Storage {
       relatedTo: parsed.data["relatedTo"] as Relationship[] | undefined,
       createdAt: parsed.data["createdAt"] ?? new Date().toISOString(),
       updatedAt: parsed.data["updatedAt"] ?? new Date().toISOString(),
+      memoryVersion: (parsed.data["memoryVersion"] as number | undefined) ?? 0,
     };
   }
 }
