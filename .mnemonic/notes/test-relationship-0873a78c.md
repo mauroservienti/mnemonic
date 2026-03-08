@@ -4,9 +4,12 @@ tags:
   - test
   - relationship
 createdAt: '2026-03-08T14:35:15.236Z'
-updatedAt: '2026-03-08T14:35:15.236Z'
+updatedAt: '2026-03-08T14:35:34.747Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
+relatedTo:
+  - id: test-structuredcontent-2a8c964a
+    type: related-to
 memoryVersion: 1
 ---
 Note to test relationships.
