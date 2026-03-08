@@ -561,40 +561,84 @@
     /* ── Tools table ── */
     .tools-section { background: var(--bg-surface); }
 
-    .tools-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 12px;
+    .tools-categories {
       margin-top: 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 36px;
     }
 
-    .tool-chip {
-      display: flex;
-      gap: 12px;
+    .tool-category-header {
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tool-category-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 10px;
+    }
+
+    .tool-card {
+      position: relative;
       padding: 14px 16px;
       border-radius: var(--radius-sm);
       border: 1px solid var(--border);
       background: var(--bg-card);
       transition: border-color 0.2s, background 0.2s;
+      cursor: default;
     }
 
-    .tool-chip:hover {
-      border-color: rgba(74,222,128,0.2);
-      background: rgba(74,222,128,0.04);
+    .tool-card:hover {
+      border-color: rgba(74,222,128,0.25);
+      background: rgba(74,222,128,0.05);
     }
 
-    .tool-name {
+    .tool-card-name {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       color: var(--cyan-lt);
-      white-space: nowrap;
-      flex-shrink: 0;
+      margin-bottom: 5px;
     }
 
-    .tool-desc {
+    .tool-card-purpose {
       font-size: 0.8rem;
-      color: var(--text-muted);
-      line-height: 1.5;
+      color: var(--text-dim);
+      line-height: 1.45;
+    }
+
+    /* Tooltip on hover */
+    .tool-card[data-tip]::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: calc(100% + 10px);
+      left: 50%;
+      transform: translateX(-50%) scale(0.96);
+      background: rgba(13,13,26,0.98);
+      border: 1px solid rgba(74,222,128,0.25);
+      color: var(--text-dim);
+      font-size: 0.74rem;
+      line-height: 1.6;
+      padding: 10px 14px;
+      border-radius: 8px;
+      width: 260px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.16s ease, transform 0.16s ease;
+      z-index: 200;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      text-align: left;
+    }
+
+    .tool-card[data-tip]:hover::after {
+      opacity: 1;
+      transform: translateX(-50%) scale(1);
     }
 
     /* ── Quick start ── */
@@ -1195,99 +1239,128 @@
     <h2 class="section-title">Everything you need, nothing you don't.</h2>
     <p class="section-desc">All tools are text-first and optimized for LLM consumption — compact, semantically explicit, no unnecessary structure.</p>
 
-    <div class="tools-grid">
-      <div class="tool-chip">
-        <span class="tool-name">remember</span>
-        <span class="tool-desc">Store a memory with project context and scope routing</span>
+    <div class="tools-categories">
+
+      <!-- Capture & Retrieve -->
+      <div>
+        <div class="tool-category-header">Capture &amp; Retrieve</div>
+        <div class="tool-category-grid">
+          <div class="tool-card" data-tip="Stores note + embedding; cwd sets project context, scope picks storage (project / global)">
+            <div class="tool-card-name">remember</div>
+            <div class="tool-card-purpose">Write a new memory to the vault</div>
+          </div>
+          <div class="tool-card" data-tip="Cosine-similarity search over embeddings; project notes boosted +0.15 when cwd is provided">
+            <div class="tool-card-name">recall</div>
+            <div class="tool-card-purpose">Search memories semantically</div>
+          </div>
+          <div class="tool-card" data-tip="Updates content, title, or tags and always re-embeds; prefer over remember to avoid fragmentation">
+            <div class="tool-card-name">update</div>
+            <div class="tool-card-purpose">Revise an existing memory</div>
+          </div>
+          <div class="tool-card" data-tip="Removes note + embedding, commits to git; cleans up all dangling relatedTo references automatically">
+            <div class="tool-card-name">forget</div>
+            <div class="tool-card-purpose">Delete a memory permanently</div>
+          </div>
+          <div class="tool-card" data-tip="Retrieves one or more notes by exact id; returns full content with frontmatter">
+            <div class="tool-card-name">get</div>
+            <div class="tool-card-purpose">Fetch a memory by exact id</div>
+          </div>
+          <div class="tool-card" data-tip="List notes filtered by scope, tags, and storage location; supports previews, relations, and timestamps">
+            <div class="tool-card-name">list</div>
+            <div class="tool-card-purpose">Browse memories with filters</div>
+          </div>
+          <div class="tool-card" data-tip="Most recently updated notes for a scope and storage location; useful for orienting at session start">
+            <div class="tool-card-name">recent_memories</div>
+            <div class="tool-card-purpose">See what was captured recently</div>
+          </div>
+        </div>
       </div>
-      <div class="tool-chip">
-        <span class="tool-name">recall</span>
-        <span class="tool-desc">Semantic search, project-boosted when cwd is provided</span>
+
+      <!-- Knowledge Graph -->
+      <div>
+        <div class="tool-category-header">Knowledge Graph</div>
+        <div class="tool-category-grid">
+          <div class="tool-card" data-tip="Creates a typed relationship (related-to, explains, example-of, supersedes); bidirectional by default">
+            <div class="tool-card-name">relate</div>
+            <div class="tool-card-purpose">Link two memories together</div>
+          </div>
+          <div class="tool-card" data-tip="Deletes a relationship between two notes in both directions; leaves notes themselves intact">
+            <div class="tool-card-name">unrelate</div>
+            <div class="tool-card-purpose">Remove a link between memories</div>
+          </div>
+          <div class="tool-card" data-tip="Compact adjacency list of all note relationships; shows the full graph structure at a glance">
+            <div class="tool-card-name">memory_graph</div>
+            <div class="tool-card-purpose">Visualize memory connections</div>
+          </div>
+          <div class="tool-card" data-tip="Detect duplicates, suggest merges; execute with supersedes (keeps sources) or delete mode">
+            <div class="tool-card-name">consolidate</div>
+            <div class="tool-card-purpose">Merge duplicate or related notes</div>
+          </div>
+        </div>
       </div>
-      <div class="tool-chip">
-        <span class="tool-name">update</span>
-        <span class="tool-desc">Update content, title, or tags; re-embeds automatically</span>
+
+      <!-- Project Context -->
+      <div>
+        <div class="tool-category-header">Project Context</div>
+        <div class="tool-category-grid">
+          <div class="tool-card" data-tip="Resolves cwd to a stable project id via git remote URL normalization; consistent across machines">
+            <div class="tool-card-name">detect_project</div>
+            <div class="tool-card-purpose">Identify which project a directory belongs to</div>
+          </div>
+          <div class="tool-card" data-tip="Summarizes note count, recent activity, tags, and relationships for the current project">
+            <div class="tool-card-name">project_memory_summary</div>
+            <div class="tool-card-purpose">Overview of a project's memory</div>
+          </div>
+          <div class="tool-card" data-tip="Shows a note's project association and actual storage path (main-vault or project-vault)">
+            <div class="tool-card-name">where_is_memory</div>
+            <div class="tool-card-purpose">Check where a memory is stored</div>
+          </div>
+          <div class="tool-card" data-tip="Moves note between main and project vault without changing its id; preserves metadata and relationships">
+            <div class="tool-card-name">move_memory</div>
+            <div class="tool-card-purpose">Transfer a memory between vaults</div>
+          </div>
+          <div class="tool-card" data-tip="Shows effective project identity and any git remote override configured for fork workflows">
+            <div class="tool-card-name">get_project_identity</div>
+            <div class="tool-card-purpose">See how a project is identified</div>
+          </div>
+          <div class="tool-card" data-tip="Overrides which git remote (e.g. upstream vs origin) is used to derive the stable project slug">
+            <div class="tool-card-name">set_project_identity</div>
+            <div class="tool-card-purpose">Configure project identity source</div>
+          </div>
+          <div class="tool-card" data-tip="Shows saved default: project vault, global vault, or ask each time a memory is written">
+            <div class="tool-card-name">get_project_memory_policy</div>
+            <div class="tool-card-purpose">Check default write scope</div>
+          </div>
+          <div class="tool-card" data-tip="Saves default write scope (project / global / ask) and consolidation mode for a project">
+            <div class="tool-card-name">set_project_memory_policy</div>
+            <div class="tool-card-purpose">Configure where memories go by default</div>
+          </div>
+        </div>
       </div>
-      <div class="tool-chip">
-        <span class="tool-name">forget</span>
-        <span class="tool-desc">Delete a memory and clean up dangling relationships</span>
+
+      <!-- Vault Operations -->
+      <div>
+        <div class="tool-category-header">Vault Operations</div>
+        <div class="tool-category-grid">
+          <div class="tool-card" data-tip="Bidirectional sync: fetch → pull (rebase) → push → auto-embed pulled notes; keeps all machines current">
+            <div class="tool-card-name">sync</div>
+            <div class="tool-card-purpose">Sync vault with git</div>
+          </div>
+          <div class="tool-card" data-tip="Rebuilds missing embeddings; force=true rebuilds all; run after switching machines or embedding models">
+            <div class="tool-card-name">reindex</div>
+            <div class="tool-card-purpose">Rebuild embeddings</div>
+          </div>
+          <div class="tool-card" data-tip="Lists available migrations and pending count for the current vault schema version">
+            <div class="tool-card-name">list_migrations</div>
+            <div class="tool-card-purpose">Check pending schema updates</div>
+          </div>
+          <div class="tool-card" data-tip="Runs a named migration with dry-run mode support; handles per-vault isolation safely">
+            <div class="tool-card-name">execute_migration</div>
+            <div class="tool-card-purpose">Apply a schema migration</div>
+          </div>
+        </div>
       </div>
-      <div class="tool-chip">
-        <span class="tool-name">get</span>
-        <span class="tool-desc">Fetch one or more memories by exact id</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">get_project_identity</span>
-        <span class="tool-desc">Show effective project identity and any remote override</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">get_project_memory_policy</span>
-        <span class="tool-desc">Show the saved default write scope for a project</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">list</span>
-        <span class="tool-desc">List memories filtered by scope, tags, and storage</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">list_migrations</span>
-        <span class="tool-desc">List available migrations and pending counts</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">relate</span>
-        <span class="tool-desc">Create a typed relationship between two memories</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">unrelate</span>
-        <span class="tool-desc">Remove a relationship between notes</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">consolidate</span>
-        <span class="tool-desc">Detect duplicates, suggest merges, execute consolidation</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">sync</span>
-        <span class="tool-desc">Bidirectional git sync — pull, push, auto-embed new notes</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">reindex</span>
-        <span class="tool-desc">Rebuild missing embeddings; force=true rebuilds all</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">memory_graph</span>
-        <span class="tool-desc">Compact adjacency list of memory relationships</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">move_memory</span>
-        <span class="tool-desc">Move a note between main and project vault</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">where_is_memory</span>
-        <span class="tool-desc">Show a note's project association and storage location</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">detect_project</span>
-        <span class="tool-desc">Resolve cwd to a stable project id via git remote URL</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">project_memory_summary</span>
-        <span class="tool-desc">Summarize what mnemonic knows about a project</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">recent_memories</span>
-        <span class="tool-desc">Most recently updated notes for a scope</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">set_project_identity</span>
-        <span class="tool-desc">Override which git remote defines project identity</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">set_project_memory_policy</span>
-        <span class="tool-desc">Save default write scope and consolidation mode</span>
-      </div>
-      <div class="tool-chip">
-        <span class="tool-name">execute_migration</span>
-        <span class="tool-desc">Run a named migration on vault notes (supports dry-run)</span>
-      </div>
+
     </div>
   </div>
 </section>
