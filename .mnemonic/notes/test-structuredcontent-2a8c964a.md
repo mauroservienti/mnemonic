@@ -1,9 +1,10 @@
 ---
-title: Test structuredContent
+title: Test structuredContent - Updated
 tags:
   - test
+  - updated
 createdAt: '2026-03-08T14:30:07.939Z'
-updatedAt: '2026-03-08T14:30:07.939Z'
+updatedAt: '2026-03-08T14:33:58.546Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
 memoryVersion: 1
