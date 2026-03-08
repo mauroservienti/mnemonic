@@ -17,6 +17,7 @@ relatedTo:
     type: related-to
   - id: github-packages-publishing-and-ci-workflow-55495350
     type: related-to
+memoryVersion: 1
 ---
 Future direction: add runtime support for loading and unloading active project context so mnemonic can stay simple at small scale while handling larger numbers of projects and memories more efficiently.
 

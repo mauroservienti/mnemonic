@@ -16,6 +16,7 @@ relatedTo:
     type: explains
   - id: mnemonic-embedding-consistency-verification-5129afcc
     type: related-to
+memoryVersion: 1
 ---
 New MCP tool `consolidate` for memory consolidation with cross-vault support.
 

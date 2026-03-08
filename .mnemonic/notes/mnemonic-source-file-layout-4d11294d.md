@@ -14,6 +14,7 @@ relatedTo:
     type: explains
   - id: mnemonic-bugs-fixed-during-initial-setup-e4faea32
     type: related-to
+memoryVersion: 1
 ---
 All runtime TypeScript source files live under `src/` to keep the repository layout obvious and predictable.
 

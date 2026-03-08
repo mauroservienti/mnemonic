@@ -12,6 +12,7 @@ projectName: mnemonic
 relatedTo:
   - id: mnemonic-source-file-layout-4d11294d
     type: related-to
+memoryVersion: 1
 ---
 Early setup exposed a few enduring implementation constraints:
 

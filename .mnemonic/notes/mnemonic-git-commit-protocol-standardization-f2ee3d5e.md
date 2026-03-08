@@ -15,6 +15,7 @@ projectName: mnemonic
 relatedTo:
   - id: mnemonic-key-design-decisions-3f2a6273
     type: related-to
+memoryVersion: 1
 ---
 Enhanced git commit protocol with comprehensive LLM-provided summary support across multiple tools.
 

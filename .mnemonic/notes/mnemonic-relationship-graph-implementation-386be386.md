@@ -12,6 +12,7 @@ projectName: mnemonic
 relatedTo:
   - id: mnemonic-mcp-tools-inventory-47499799
     type: related-to
+memoryVersion: 1
 ---
 Added typed relationship graph stored in note frontmatter.
 

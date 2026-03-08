@@ -12,6 +12,7 @@ projectName: mnemonic
 relatedTo:
   - id: mnemonic-project-overview-and-purpose-763b7a51
     type: related-to
+memoryVersion: 1
 ---
 **`compose.yaml`** runs three services:
 

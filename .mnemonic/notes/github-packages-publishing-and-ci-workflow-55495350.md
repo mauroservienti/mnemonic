@@ -19,6 +19,7 @@ relatedTo:
     type: related-to
   - id: dynamic-project-context-loading-plan-9f2ed29c
     type: related-to
+memoryVersion: 1
 ---
 As of March 2026, mnemonic has GitHub Actions automation for both verification and publishing.
 

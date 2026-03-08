@@ -18,6 +18,7 @@ relatedTo:
     type: related-to
   - id: dynamic-project-context-loading-plan-9f2ed29c
     type: related-to
+memoryVersion: 1
 ---
 A personal MCP memory server backed by plain markdown + JSON files, synced via git. No database, no permanent services.
 

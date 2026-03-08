@@ -13,6 +13,7 @@ projectName: mnemonic
 relatedTo:
   - id: mnemonic-consolidate-tool-design-b9cbac6a
     type: example-of
+memoryVersion: 1
 ---
 When dogfooding mnemonic via direct stdio communication, complex JSON payloads with newlines and special characters can fail silently due to shell escaping issues.
 

@@ -12,6 +12,7 @@ projectName: mnemonic
 relatedTo:
   - id: mnemonic-key-design-decisions-3f2a6273
     type: related-to
+memoryVersion: 1
 ---
 Decision: lint markdown note bodies during `remember` and `update` so recalled content stays clean and consistent.
 

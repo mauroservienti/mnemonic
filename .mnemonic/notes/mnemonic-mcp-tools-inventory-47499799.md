@@ -13,6 +13,7 @@ relatedTo:
     type: related-to
   - id: mnemonic-consolidate-tool-design-b9cbac6a
     type: explains
+memoryVersion: 1
 ---
 Tools registered in `src/index.ts`:
 

@@ -16,5 +16,6 @@ relatedTo:
     type: related-to
   - id: npm-package-renamed-to-mnemonic-mcp-54a86ad6
     type: related-to
+memoryVersion: 1
 ---
 The MCP server version reported at startup is now read from package.json instead of being hard-coded in src/index.ts. This keeps the runtime metadata aligned with the published npm package version and avoids updating the version in multiple places.

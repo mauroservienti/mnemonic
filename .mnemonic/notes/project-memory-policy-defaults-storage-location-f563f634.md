@@ -12,6 +12,7 @@ projectName: mnemonic
 relatedTo:
   - id: mnemonic-key-design-decisions-3f2a6273
     type: related-to
+memoryVersion: 1
 ---
 Decision: project context and storage location are separate, and each project can keep a default write policy so agents only need to ask when necessary.
 

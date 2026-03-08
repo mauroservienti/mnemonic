@@ -13,6 +13,7 @@ projectName: mnemonic
 relatedTo:
   - id: mnemonic-consolidate-tool-design-b9cbac6a
     type: related-to
+memoryVersion: 1
 ---
 Comprehensive verification of embedding handling across all mutating MCP commands.
 

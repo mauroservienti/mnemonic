@@ -22,6 +22,7 @@ relatedTo:
     type: related-to
   - id: mnemonic-git-commit-protocol-standardization-f2ee3d5e
     type: related-to
+memoryVersion: 1
 ---
 **One file per note:** Critical for git conflict isolation. Never aggregate notes into a single file.
 
