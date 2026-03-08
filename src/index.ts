@@ -34,6 +34,10 @@ import type {
   RecallResult,
   ListResult,
   GetResult,
+  UpdateResult,
+  ForgetResult,
+  MoveResult,
+  RelateResult,
 } from "./structured-content.js";
 
 // ── CLI Migration Command ─────────────────────────────────────────────────────
@@ -1215,7 +1219,17 @@ server.registerTool(
     await vault.git.commit(`update: ${updated.title}`, [vaultManager.noteRelPath(vault, id)], commitBody);
     await vault.git.push();
 
-    return { content: [{ type: "text", text: `Updated memory '${id}'` }] };
+    const structuredContent: UpdateResult = {
+      action: "updated",
+      id,
+      title: updated.title,
+      fieldsModified: changes,
+      timestamp: now,
+      project: updated.project,
+      projectName: updated.projectName,
+    };
+    
+    return { content: [{ type: "text", text: `Updated memory '${id}'` }], structuredContent };
   }
 );
 
@@ -1258,7 +1272,17 @@ server.registerTool(
       await v.git.push();
     }
 
-    return { content: [{ type: "text", text: `Forgotten '${id}' (${note.title})` }] };
+    const structuredContent: ForgetResult = {
+      action: "forgotten",
+      id,
+      title: note.title,
+      project: note.project,
+      projectName: note.projectName,
+      relationshipsCleaned: vaultChanges.size > 0 ? Array.from(vaultChanges.values()).reduce((sum, files) => sum + files.length - 1, 0) : 0,
+      vaultsModified: Array.from(vaultChanges.keys()).map(v => v.isProject ? "project-vault" : "main-vault"),
+    };
+    
+    return { content: [{ type: "text", text: `Forgotten '${id}' (${note.title})` }], structuredContent };
   }
 );
 
@@ -1723,11 +1747,22 @@ server.registerTool(
     }
 
     await moveNoteBetweenVaults(found, targetVault);
+    
+    const structuredContent: MoveResult = {
+      action: "moved",
+      id,
+      fromVault: currentStorage as "project-vault" | "main-vault",
+      toVault: target,
+      projectAssociation: found.note.projectName ?? found.note.project ?? "global",
+      title: found.note.title,
+    };
+    
     return {
       content: [{
         type: "text",
         text: `Moved '${id}' from ${currentStorage} to ${target}. Project association remains ${found.note.projectName ?? found.note.project ?? "global"}.`,
       }],
+      structuredContent,
     };
   }
 );
@@ -1794,6 +1829,7 @@ server.registerTool(
       return { content: [{ type: "text", text: `Relationship already exists between '${fromId}' and '${toId}'` }] };
     }
 
+    const modifiedNoteIds: string[] = [];
     for (const [vault, files] of vaultChanges) {
       const isFromVault = vault === fromVault;
       const thisNote = isFromVault ? fromNote : toNote;
@@ -1810,11 +1846,22 @@ server.registerTool(
       });
       await vault.git.commit(`relate: ${fromNote.title} ↔ ${toNote.title}`, files, commitBody);
       await vault.git.push();
+      modifiedNoteIds.push(...files.map(f => path.basename(f, '.md')));
     }
 
     const dirStr = bidirectional ? "↔" : "→";
+    const structuredContent: RelateResult = {
+      action: "related",
+      fromId,
+      toId,
+      type,
+      bidirectional,
+      notesModified: modifiedNoteIds,
+    };
+    
     return {
       content: [{ type: "text", text: `Linked \`${fromId}\` ${dirStr} \`${toId}\` (${type})` }],
+      structuredContent,
     };
   }
 );
@@ -1880,7 +1927,21 @@ server.registerTool(
       await vault.git.push();
     }
 
-    return { content: [{ type: "text", text: `Removed relationship between \`${fromId}\` and \`${toId}\`` }] };
+    const modifiedNoteIds: string[] = [];
+    for (const [vault, files] of vaultChanges) {
+      modifiedNoteIds.push(...files.map(f => path.basename(f, '.md')));
+    }
+    
+    const structuredContent: RelateResult = {
+      action: "unrelated",
+      fromId,
+      toId,
+      type: "related-to", // not tracked for unrelate
+      bidirectional,
+      notesModified: modifiedNoteIds,
+    };
+    
+    return { content: [{ type: "text", text: `Removed relationship between \`${fromId}\` and \`${toId}\`` }], structuredContent };
   }
 );
 
