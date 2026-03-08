@@ -92,6 +92,7 @@ export interface MoveResult extends Record<string, unknown> {
   toVault: "project-vault" | "main-vault";
   projectAssociation: string;
   title: string;
+  metadataRewritten?: boolean;
 }
 
 export interface UpdateResult extends Record<string, unknown> {
