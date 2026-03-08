@@ -513,6 +513,176 @@ Second note`,
       };
       expect(config.schemaVersion).toBe("0.0");
     });
+
+    it("recovers cleanly after an interrupted run and succeeds on retry", async () => {
+      await fs.writeFile(
+        path.join(tempDir, "notes", "note-1.md"),
+        `---
+title: Note 1
+tags: []
+createdAt: 2026-01-01T00:00:00.000Z
+updatedAt: 2026-01-01T00:00:00.000Z
+---
+
+Original content`,
+        "utf-8"
+      );
+      await fs.writeFile(
+        path.join(tempDir, "notes", "note-2.md"),
+        `---
+title: Note 2
+tags: []
+createdAt: 2026-01-01T00:00:00.000Z
+updatedAt: 2026-01-01T00:00:00.000Z
+memoryVersion: 1
+---
+
+Second note`,
+        "utf-8"
+      );
+
+      migrator.registerMigration(createFailingAtomicityMigration());
+      const firstCommitSpy = vi.spyOn(vault.git, "commit").mockResolvedValue(true);
+      const firstPushSpy = vi.spyOn(vault.git, "push").mockResolvedValue(undefined);
+
+      const firstRun = await migrator.runAllPending({ dryRun: false });
+      const firstFailure = firstRun.migrationResults.get(tempDir)?.find(
+        ({ migration }) => migration === "failing-atomicity-check"
+      )?.result;
+
+      expect(firstFailure?.errors).toHaveLength(1);
+      expect(firstCommitSpy).not.toHaveBeenCalled();
+      expect(firstPushSpy).not.toHaveBeenCalled();
+
+      let config = JSON.parse(await fs.readFile(path.join(tempDir, "config.json"), "utf-8")) as {
+        schemaVersion: string;
+      };
+      expect(config.schemaVersion).toBe("0.0");
+
+      const rolledBackNote = await storage.readNote("note-1");
+      expect(rolledBackNote?.memoryVersion).toBe(0);
+
+      const retryCommitSpy = vi.spyOn(vault.git, "commit").mockResolvedValue(true);
+      const retryPushSpy = vi.spyOn(vault.git, "push").mockResolvedValue(undefined);
+      const retryMigrator = new Migrator(vaultManager);
+
+      const retryRun = await retryMigrator.runAllPending({ dryRun: false });
+      const retryBackfill = retryRun.migrationResults.get(tempDir)?.find(
+        ({ migration }) => migration === "v0.1.0-backfill-memory-versions"
+      )?.result;
+
+      expect(retryBackfill?.errors).toEqual([]);
+      expect(retryBackfill?.notesModified).toBe(2);
+      expect(retryCommitSpy).toHaveBeenCalled();
+      expect(retryPushSpy).toHaveBeenCalled();
+
+      config = JSON.parse(await fs.readFile(path.join(tempDir, "config.json"), "utf-8")) as {
+        schemaVersion: string;
+      };
+      expect(config.schemaVersion).toBe("1.0");
+
+      const retriedNote = await storage.readNote("note-1");
+      expect(retriedNote?.memoryVersion).toBe(1);
+    });
+
+    it("stays stable across dry-run, execute, and repeat execute", async () => {
+      const commitSpy = vi.spyOn(vault.git, "commit").mockResolvedValue(true);
+      const pushSpy = vi.spyOn(vault.git, "push").mockResolvedValue(undefined);
+
+      const dryRun = await migrator.runAllPending({ dryRun: true });
+      expect(dryRun.migrationResults.get(tempDir)?.[0]?.result.notesModified).toBe(1);
+
+      const firstExecute = await migrator.runAllPending({ dryRun: false });
+      expect(firstExecute.migrationResults.get(tempDir)?.[0]?.result.notesModified).toBe(1);
+
+      const secondExecute = await migrator.runAllPending({ dryRun: false });
+      expect(secondExecute.migrationResults.has(tempDir)).toBe(false);
+
+      expect(commitSpy).toHaveBeenCalledTimes(1);
+      expect(pushSpy).toHaveBeenCalledTimes(1);
+
+      const config = JSON.parse(await fs.readFile(path.join(tempDir, "config.json"), "utf-8")) as {
+        schemaVersion: string;
+      };
+      expect(config.schemaVersion).toBe("1.0");
+    });
+
+    it("skips a project vault that was already migrated in an earlier session", async () => {
+      const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "mnemonic-project-"));
+      const projectStorage = new Storage(projectDir);
+      await projectStorage.init();
+      await fs.writeFile(
+        path.join(projectDir, "config.json"),
+        JSON.stringify({ schemaVersion: "0.0", reindexEmbedConcurrency: 4, projectMemoryPolicies: {} }, null, 2),
+        "utf-8"
+      );
+      await fs.writeFile(
+        path.join(projectDir, "notes", "project-note.md"),
+        `---
+title: Project Note
+tags: []
+createdAt: 2026-01-01T00:00:00.000Z
+updatedAt: 2026-01-01T00:00:00.000Z
+---
+
+Project content`,
+        "utf-8"
+      );
+
+      const projectVault: Vault = {
+        storage: projectStorage,
+        git: new GitOps(projectDir, "notes"),
+        notesRelDir: "notes",
+        isProject: true,
+      };
+
+      const sessionOneVaultManager = {
+        main: vault,
+        allKnownVaults: vi.fn().mockReturnValue([vault, projectVault]),
+        getProjectVaultIfExists: vi.fn().mockImplementation(async (cwd: string) => {
+          return cwd === projectDir ? projectVault : vault;
+        }),
+      } as unknown as VaultManager;
+
+      const projectCommitSpy = vi.spyOn(projectVault.git, "commit").mockResolvedValue(true);
+      const projectPushSpy = vi.spyOn(projectVault.git, "push").mockResolvedValue(undefined);
+      const sessionOneMigrator = new Migrator(sessionOneVaultManager);
+
+      const projectRun = await sessionOneMigrator.runAllPending({ dryRun: false, cwd: projectDir });
+      expect(projectRun.migrationResults.has(projectDir)).toBe(true);
+      expect(projectCommitSpy).toHaveBeenCalledTimes(1);
+      expect(projectPushSpy).toHaveBeenCalledTimes(1);
+
+      let projectConfig = JSON.parse(await fs.readFile(path.join(projectDir, "config.json"), "utf-8")) as {
+        schemaVersion: string;
+      };
+      expect(projectConfig.schemaVersion).toBe("1.0");
+
+      const sessionTwoVaultManager = {
+        main: vault,
+        allKnownVaults: vi.fn().mockReturnValue([vault, projectVault]),
+        getProjectVaultIfExists: vi.fn().mockResolvedValue(projectVault),
+      } as unknown as VaultManager;
+
+      const mainCommitSpy = vi.spyOn(vault.git, "commit").mockResolvedValue(true);
+      const mainPushSpy = vi.spyOn(vault.git, "push").mockResolvedValue(undefined);
+      projectCommitSpy.mockClear();
+      projectPushSpy.mockClear();
+
+      const sessionTwoMigrator = new Migrator(sessionTwoVaultManager);
+      const secondRun = await sessionTwoMigrator.runAllPending({ dryRun: false });
+
+      expect(secondRun.migrationResults.has(projectDir)).toBe(false);
+      expect(projectCommitSpy).not.toHaveBeenCalled();
+      expect(projectPushSpy).not.toHaveBeenCalled();
+      expect(mainCommitSpy).toHaveBeenCalledTimes(1);
+      expect(mainPushSpy).toHaveBeenCalledTimes(1);
+
+      projectConfig = JSON.parse(await fs.readFile(path.join(projectDir, "config.json"), "utf-8")) as {
+        schemaVersion: string;
+      };
+      expect(projectConfig.schemaVersion).toBe("1.0");
+    });
   });
 
   describe("Version comparison", () => {

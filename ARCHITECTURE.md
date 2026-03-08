@@ -115,7 +115,15 @@ flowchart TD
 ### Sync and migration flow
 
 - `GitOps.sync()` performs `fetch -> count unpushed commits -> pull --rebase -> diff note changes -> push` and returns note ids that need re-embedding.
-- `Migrator` applies schema-aware note migrations across loaded vaults and updates `config.json` schema version only after successful non-dry-run global execution.
+- `Migrator` applies schema-aware note migrations across loaded vaults and updates each vault's `config.json` schema version only after successful non-dry-run execution for that vault.
+
+#### Migration invariants
+
+- A vault schema version advances only after all pending migrations for that vault succeed.
+- Failed non-dry-run migrations do not flush partial note writes into the vault working tree.
+- Re-running the same migration against an already-migrated vault must be a no-op.
+- Pending migrations execute in schema-version order, not registration order.
+- Fresh installs begin at the latest schema version declared by `defaultConfig.schemaVersion`, so that value must be bumped whenever a new latest-schema migration is introduced.
 
 ## Source layout and responsibilities
 

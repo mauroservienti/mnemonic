@@ -10,6 +10,9 @@ export interface MnemonicConfig {
 }
 
 const defaultConfig: MnemonicConfig = {
+  // Keep this at the latest schema version. When adding a new latest-schema
+  // migration, bump this value in the same change so fresh installs start at
+  // the current schema instead of missing that migration.
   schemaVersion: "1.0",
   reindexEmbedConcurrency: 4,
   projectMemoryPolicies: {},
