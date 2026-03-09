@@ -14,7 +14,7 @@
     :root {
       --bg:          #07070f;
       --bg-surface:  #0d0d1a;
-      --bg-card:     rgba(255,255,255,0.03);
+      --bg-card:     rgba(13,13,26,0.92);
       --border:      rgba(255,255,255,0.07);
       --border-glow: rgba(74,222,128,0.3);
       --text:        #e2e8f0;
@@ -84,7 +84,19 @@
       padding: 0 24px;
     }
 
-    section { padding: 96px 0; }
+    section { padding: 96px 0; position: relative; overflow: hidden; }
+
+    /* ── Section background art ── */
+    .section-art {
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      user-select: none;
+      z-index: 0;
+      opacity: 0.18;
+    }
 
     /* ── Early-stage banner ── */
     .early-banner {
@@ -290,7 +302,7 @@
     /* ── Terminal block ── */
     .hero-terminal {
       margin-top: 64px;
-      background: rgba(13,13,26,0.8);
+      background: rgba(13,13,26,0.97);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       overflow: hidden;
@@ -779,7 +791,7 @@
       padding: 40px;
       border-radius: var(--radius);
       border: 1px solid rgba(6,182,212,0.2);
-      background: rgba(6,182,212,0.04);
+      background: rgba(6,25,35,0.96);
       position: relative;
       overflow: hidden;
     }
@@ -1053,6 +1065,47 @@
 
 <!-- ── Hero ── -->
 <section class="hero">
+  <svg class="section-art" width="480" height="480" viewBox="0 0 480 480" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <!-- Spoke edges from center -->
+    <line x1="240" y1="240" x2="95" y2="125" stroke="#4ade80" stroke-width="1"/>
+    <line x1="240" y1="240" x2="375" y2="110" stroke="#4ade80" stroke-width="1"/>
+    <line x1="240" y1="240" x2="430" y2="248" stroke="#4ade80" stroke-width="1"/>
+    <line x1="240" y1="240" x2="368" y2="375" stroke="#06b6d4" stroke-width="1"/>
+    <line x1="240" y1="240" x2="105" y2="368" stroke="#06b6d4" stroke-width="1"/>
+    <line x1="240" y1="240" x2="52" y2="238" stroke="#4ade80" stroke-width="1"/>
+    <!-- Ring connections -->
+    <line x1="95" y1="125" x2="375" y2="110" stroke="#4ade80" stroke-width="0.6"/>
+    <line x1="375" y1="110" x2="430" y2="248" stroke="#4ade80" stroke-width="0.6"/>
+    <line x1="430" y1="248" x2="368" y2="375" stroke="#06b6d4" stroke-width="0.6"/>
+    <line x1="368" y1="375" x2="105" y2="368" stroke="#06b6d4" stroke-width="0.6"/>
+    <line x1="105" y1="368" x2="52" y2="238" stroke="#4ade80" stroke-width="0.6"/>
+    <line x1="52" y1="238" x2="95" y2="125" stroke="#4ade80" stroke-width="0.6"/>
+    <!-- Outer satellite edges -->
+    <line x1="95" y1="125" x2="52" y2="68" stroke="#4ade80" stroke-width="0.6"/>
+    <line x1="375" y1="110" x2="430" y2="52" stroke="#4ade80" stroke-width="0.6"/>
+    <line x1="430" y1="248" x2="478" y2="228" stroke="#4ade80" stroke-width="0.6"/>
+    <line x1="368" y1="375" x2="422" y2="440" stroke="#06b6d4" stroke-width="0.6"/>
+    <line x1="105" y1="368" x2="48" y2="432" stroke="#06b6d4" stroke-width="0.6"/>
+    <line x1="52" y1="238" x2="12" y2="196" stroke="#4ade80" stroke-width="0.6"/>
+    <!-- Primary nodes -->
+    <circle cx="240" cy="240" r="10" stroke="#4ade80" stroke-width="1.5"/>
+    <circle cx="95" cy="125" r="7" stroke="#4ade80" stroke-width="1.5"/>
+    <circle cx="375" cy="110" r="7" stroke="#4ade80" stroke-width="1.5"/>
+    <circle cx="430" cy="248" r="6" stroke="#4ade80" stroke-width="1.5"/>
+    <circle cx="368" cy="375" r="7" stroke="#06b6d4" stroke-width="1.5"/>
+    <circle cx="105" cy="368" r="7" stroke="#06b6d4" stroke-width="1.5"/>
+    <circle cx="52" cy="238" r="6" stroke="#4ade80" stroke-width="1.5"/>
+    <!-- Satellite nodes -->
+    <circle cx="52" cy="68" r="4" stroke="#4ade80" stroke-width="1"/>
+    <circle cx="430" cy="52" r="4" stroke="#4ade80" stroke-width="1"/>
+    <circle cx="478" cy="228" r="3" stroke="#4ade80" stroke-width="1"/>
+    <circle cx="422" cy="440" r="4" stroke="#06b6d4" stroke-width="1"/>
+    <circle cx="48" cy="432" r="4" stroke="#06b6d4" stroke-width="1"/>
+    <circle cx="12" cy="196" r="3" stroke="#4ade80" stroke-width="1"/>
+    <!-- Pulse rings on center -->
+    <circle cx="240" cy="240" r="25" stroke="#4ade80" stroke-width="0.5" stroke-dasharray="4 6"/>
+    <circle cx="240" cy="240" r="50" stroke="#4ade80" stroke-width="0.3" stroke-dasharray="2 8"/>
+  </svg>
   <div class="container">
     <div class="hero-badge">MCP memory server</div>
 
@@ -1110,6 +1163,26 @@
 
 <!-- ── Why section ── -->
 <section id="why">
+  <svg class="section-art" width="480" height="480" viewBox="0 0 480 480" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <!-- Concentric rotated squares (diamonds) -->
+    <polygon points="240,210 270,240 240,270 210,240" stroke="#4ade80" stroke-width="1.5"/>
+    <polygon points="240,178 302,240 240,302 178,240" stroke="#4ade80" stroke-width="1.2"/>
+    <polygon points="240,142 338,240 240,338 142,240" stroke="#06b6d4" stroke-width="1"/>
+    <polygon points="240,102 378,240 240,378 102,240" stroke="#06b6d4" stroke-width="0.8"/>
+    <polygon points="240,62 418,240 240,418 62,240" stroke="#4ade80" stroke-width="0.6" stroke-dasharray="6 4"/>
+    <polygon points="240,22 458,240 240,458 22,240" stroke="#4ade80" stroke-width="0.4" stroke-dasharray="3 7"/>
+    <!-- Radiating axis lines -->
+    <line x1="240" y1="240" x2="240" y2="22" stroke="#4ade80" stroke-width="0.4" stroke-dasharray="3 6"/>
+    <line x1="240" y1="240" x2="458" y2="240" stroke="#4ade80" stroke-width="0.4" stroke-dasharray="3 6"/>
+    <line x1="240" y1="240" x2="240" y2="458" stroke="#06b6d4" stroke-width="0.4" stroke-dasharray="3 6"/>
+    <line x1="240" y1="240" x2="22" y2="240" stroke="#06b6d4" stroke-width="0.4" stroke-dasharray="3 6"/>
+    <!-- Vertex dots at outer diamond -->
+    <circle cx="240" cy="62" r="3" stroke="#4ade80" stroke-width="1"/>
+    <circle cx="418" cy="240" r="3" stroke="#4ade80" stroke-width="1"/>
+    <circle cx="240" cy="418" r="3" stroke="#06b6d4" stroke-width="1"/>
+    <circle cx="62" cy="240" r="3" stroke="#06b6d4" stroke-width="1"/>
+    <circle cx="240" cy="240" r="5" stroke="#4ade80" stroke-width="1.5"/>
+  </svg>
   <div class="container">
     <div class="section-label">Why mnemonic</div>
     <h2 class="section-title">Stop re-explaining your codebase.</h2>
@@ -1164,6 +1237,32 @@
 
 <!-- ── How it works ── -->
 <section id="how">
+  <svg class="section-art" width="480" height="480" viewBox="0 0 480 480" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <marker id="how-ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <polyline points="0,1 9,5 0,9" stroke="#4ade80" stroke-width="1.5" fill="none"/>
+      </marker>
+      <marker id="how-ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <polyline points="0,1 9,5 0,9" stroke="#06b6d4" stroke-width="1.5" fill="none"/>
+      </marker>
+    </defs>
+    <!-- Main vault (green, top) -->
+    <rect x="105" y="88" width="210" height="128" rx="10" stroke="#4ade80" stroke-width="1.5"/>
+    <ellipse cx="210" cy="88" rx="105" ry="18" stroke="#4ade80" stroke-width="1.5"/>
+    <line x1="140" y1="138" x2="285" y2="138" stroke="#4ade80" stroke-width="0.8"/>
+    <line x1="140" y1="156" x2="265" y2="156" stroke="#4ade80" stroke-width="0.6"/>
+    <line x1="140" y1="174" x2="248" y2="174" stroke="#4ade80" stroke-width="0.5"/>
+    <!-- Project vault (cyan, bottom) -->
+    <rect x="135" y="286" width="210" height="128" rx="10" stroke="#06b6d4" stroke-width="1.5"/>
+    <ellipse cx="240" cy="286" rx="105" ry="18" stroke="#06b6d4" stroke-width="1.5"/>
+    <line x1="170" y1="334" x2="315" y2="334" stroke="#06b6d4" stroke-width="0.8"/>
+    <line x1="170" y1="352" x2="295" y2="352" stroke="#06b6d4" stroke-width="0.6"/>
+    <line x1="170" y1="370" x2="278" y2="370" stroke="#06b6d4" stroke-width="0.5"/>
+    <!-- Routing arrow: main vault → project vault -->
+    <path d="M 188,216 C 178,250 195,256 205,286" stroke="#4ade80" stroke-width="1" fill="none" stroke-dasharray="5 3" marker-end="url(#how-ag)"/>
+    <!-- Routing arrow: project vault → main vault -->
+    <path d="M 278,286 C 290,252 272,246 268,216" stroke="#06b6d4" stroke-width="1" fill="none" stroke-dasharray="5 3" marker-end="url(#how-ac)"/>
+  </svg>
   <div class="container">
     <div class="section-label">How it works</div>
     <h2 class="section-title">Two vaults, one mental model.</h2>
@@ -1240,6 +1339,42 @@
 
 <!-- ── Tools ── -->
 <section id="tools" class="tools-section">
+  <svg class="section-art" width="480" height="480" viewBox="0 0 480 480" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <!-- Grid lines (horizontal) -->
+    <path d="M 60,80 H 420 M 60,160 H 420 M 60,240 H 420 M 60,320 H 420 M 60,400 H 420" stroke="#4ade80" stroke-width="0.5"/>
+    <!-- Grid lines (vertical) -->
+    <path d="M 60,80 V 400 M 150,80 V 400 M 240,80 V 400 M 330,80 V 400 M 420,80 V 400" stroke="#06b6d4" stroke-width="0.5"/>
+    <!-- Row 1 nodes -->
+    <circle cx="60"  cy="80"  r="5"   stroke="#4ade80" stroke-width="1.2"/>
+    <circle cx="150" cy="80"  r="3.5" stroke="#4ade80" stroke-width="1"/>
+    <circle cx="240" cy="80"  r="5"   stroke="#4ade80" stroke-width="1.2"/>
+    <circle cx="330" cy="80"  r="3.5" stroke="#4ade80" stroke-width="1"/>
+    <circle cx="420" cy="80"  r="4"   stroke="#4ade80" stroke-width="1"/>
+    <!-- Row 2 nodes -->
+    <circle cx="60"  cy="160" r="3.5" stroke="#4ade80" stroke-width="1"/>
+    <circle cx="150" cy="160" r="5"   stroke="#06b6d4" stroke-width="1.2"/>
+    <circle cx="240" cy="160" r="3.5" stroke="#4ade80" stroke-width="1"/>
+    <circle cx="330" cy="160" r="5"   stroke="#06b6d4" stroke-width="1.2"/>
+    <circle cx="420" cy="160" r="3.5" stroke="#4ade80" stroke-width="1"/>
+    <!-- Row 3 nodes (center) -->
+    <circle cx="60"  cy="240" r="4"   stroke="#4ade80" stroke-width="1"/>
+    <circle cx="150" cy="240" r="3.5" stroke="#06b6d4" stroke-width="1"/>
+    <circle cx="240" cy="240" r="7"   stroke="#4ade80" stroke-width="1.5"/>
+    <circle cx="330" cy="240" r="3.5" stroke="#06b6d4" stroke-width="1"/>
+    <circle cx="420" cy="240" r="4"   stroke="#4ade80" stroke-width="1"/>
+    <!-- Row 4 nodes -->
+    <circle cx="60"  cy="320" r="3.5" stroke="#06b6d4" stroke-width="1"/>
+    <circle cx="150" cy="320" r="5"   stroke="#06b6d4" stroke-width="1.2"/>
+    <circle cx="240" cy="320" r="3.5" stroke="#06b6d4" stroke-width="1"/>
+    <circle cx="330" cy="320" r="5"   stroke="#4ade80" stroke-width="1.2"/>
+    <circle cx="420" cy="320" r="3.5" stroke="#06b6d4" stroke-width="1"/>
+    <!-- Row 5 nodes -->
+    <circle cx="60"  cy="400" r="4"   stroke="#06b6d4" stroke-width="1"/>
+    <circle cx="150" cy="400" r="3.5" stroke="#06b6d4" stroke-width="1"/>
+    <circle cx="240" cy="400" r="5"   stroke="#06b6d4" stroke-width="1.2"/>
+    <circle cx="330" cy="400" r="3.5" stroke="#06b6d4" stroke-width="1"/>
+    <circle cx="420" cy="400" r="4"   stroke="#06b6d4" stroke-width="1"/>
+  </svg>
   <div class="container">
     <div class="section-label">MCP tools</div>
     <h2 class="section-title">Everything you need, nothing you don't.</h2>
@@ -1375,6 +1510,31 @@
 
 <!-- ── Setup ── -->
 <section id="setup">
+  <svg class="section-art" width="480" height="480" viewBox="0 0 480 480" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <!-- Row 1: prompt + long command -->
+    <polyline points="60,88  74,100  60,112" stroke="#4ade80" stroke-width="1.5" fill="none"/>
+    <line x1="84" y1="100" x2="360" y2="100" stroke="#4ade80" stroke-width="1.2"/>
+    <!-- Row 2: indent + output -->
+    <line x1="84" y1="138" x2="290" y2="138" stroke="#4ade80" stroke-width="0.7"/>
+    <line x1="84" y1="152" x2="240" y2="152" stroke="#4ade80" stroke-width="0.5"/>
+    <!-- Row 3: prompt + short command -->
+    <polyline points="60,186 74,198 60,210" stroke="#06b6d4" stroke-width="1.5" fill="none"/>
+    <line x1="84" y1="198" x2="260" y2="198" stroke="#06b6d4" stroke-width="1.2"/>
+    <!-- Row 4: indent + output lines -->
+    <line x1="84" y1="234" x2="380" y2="234" stroke="#06b6d4" stroke-width="0.7"/>
+    <line x1="84" y1="248" x2="310" y2="248" stroke="#06b6d4" stroke-width="0.5"/>
+    <line x1="84" y1="262" x2="270" y2="262" stroke="#06b6d4" stroke-width="0.4"/>
+    <!-- Row 5: prompt + long command -->
+    <polyline points="60,296 74,308 60,320" stroke="#4ade80" stroke-width="1.5" fill="none"/>
+    <line x1="84" y1="308" x2="420" y2="308" stroke="#4ade80" stroke-width="1.2"/>
+    <!-- Row 6: indent + short output -->
+    <line x1="84" y1="344" x2="200" y2="344" stroke="#4ade80" stroke-width="0.7"/>
+    <!-- Row 7: prompt + medium command -->
+    <polyline points="60,378 74,390 60,402" stroke="#06b6d4" stroke-width="1.5" fill="none"/>
+    <line x1="84" y1="390" x2="320" y2="390" stroke="#06b6d4" stroke-width="1.2"/>
+    <!-- Cursor blink indicator -->
+    <rect x="84" y="424" width="10" height="16" rx="1" stroke="#4ade80" stroke-width="1"/>
+  </svg>
   <div class="container">
     <div class="section-label">Setup</div>
     <h2 class="section-title">Running in minutes.</h2>
@@ -1654,6 +1814,25 @@ Guidelines:
 <!-- ── Dogfooding ── -->
 <div class="divider"></div>
 <section id="dogfooding">
+  <svg class="section-art" width="480" height="480" viewBox="0 0 480 480" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <marker id="dog-ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <polyline points="0,1 9,5 0,9" stroke="#4ade80" stroke-width="1.5" fill="none"/>
+      </marker>
+      <marker id="dog-ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <polyline points="0,1 9,5 0,9" stroke="#06b6d4" stroke-width="1.5" fill="none"/>
+      </marker>
+    </defs>
+    <!-- Outer circular arrow: clockwise 300°, r=170, start=top (240,70), end≈(93,155) -->
+    <path d="M 240,70 A 170,170 0 1 1 93,155" stroke="#4ade80" stroke-width="1.5" fill="none" marker-end="url(#dog-ag)"/>
+    <!-- Inner circular arrow: counterclockwise 260°, r=115, start=top (240,125), end≈(350,258) -->
+    <path d="M 240,125 A 115,115 0 1 0 350,258" stroke="#06b6d4" stroke-width="1" fill="none" stroke-dasharray="6 4" marker-end="url(#dog-ac)"/>
+    <!-- Faint outermost ring -->
+    <circle cx="240" cy="240" r="210" stroke="#4ade80" stroke-width="0.4" stroke-dasharray="3 9"/>
+    <!-- Center dot -->
+    <circle cx="240" cy="240" r="6" stroke="#4ade80" stroke-width="1.5"/>
+    <circle cx="240" cy="240" r="20" stroke="#4ade80" stroke-width="0.5" stroke-dasharray="3 5"/>
+  </svg>
   <div class="container">
     <div class="section-label">Dogfooding</div>
     <h2 class="section-title">mnemonic remembers its own decisions.</h2>
