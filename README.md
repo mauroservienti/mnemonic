@@ -252,6 +252,49 @@ Each vault has its own `config.json` with a `schemaVersion`, so main and project
 - Failed migration runs roll staged note writes back instead of leaving partial edits.
 - Metadata-only migrations do not re-embed automatically; re-embedding happens on title/content change or during `sync` backfill.
 
+## CLI commands
+
+mnemonic ships CLI commands in addition to the MCP server.
+
+### `mnemonic migrate`
+
+Apply pending schema migrations to your vaults. Always preview with `--dry-run` first.
+
+```bash
+# Preview what would change
+mnemonic migrate --dry-run
+
+# Apply and auto-commit
+mnemonic migrate
+
+# Limit to one project vault
+mnemonic migrate --dry-run --cwd=/path/to/project
+mnemonic migrate --cwd=/path/to/project
+
+# List available migrations and pending count
+mnemonic migrate --list
+```
+
+### `mnemonic import-claude-memory`
+
+Import [Claude Code auto-memory](https://docs.anthropic.com/en/docs/claude-code/memory) into your vault. Claude Code stores per-project auto-memory at `~/.claude/projects/<encoded-path>/memory/*.md`. Each `##` heading becomes a separate mnemonic note tagged with `claude-memory` and `imported`. Notes whose titles already exist in the vault are skipped, so the command is safe to re-run.
+
+```bash
+# Preview what would be imported
+mnemonic import-claude-memory --dry-run
+
+# Import from the current directory's Claude memory
+mnemonic import-claude-memory
+
+# Import for a specific project path
+mnemonic import-claude-memory --cwd=/path/to/project
+
+# Use a non-default Claude home
+mnemonic import-claude-memory --claude-home=/custom/.claude
+```
+
+Imported notes are written to the main vault with `lifecycle: permanent` and `scope: global`. After importing, run `sync` to embed them and push to your remote.
+
 ## Tools
 
 | Tool                        | Description                                                              |

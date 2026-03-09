@@ -1656,6 +1656,49 @@
     </div>
     <p>The runtime is compatible with other Ollama embedding models that support <code>/api/embed</code>. For example, <code>qwen3-embedding:0.6b</code> works as a drop-in <code>EMBED_MODEL</code> override and may be preferable for longer-context notes.</p>
 
+    <div class="fade-up" style="margin-top:48px">
+      <h3 style="font-size:1.15rem;font-weight:600;margin-bottom:16px">CLI utilities</h3>
+      <p style="color:var(--text-dim);margin-bottom:24px">mnemonic ships two CLI commands alongside the MCP server.</p>
+      <div class="quickstart-grid" style="gap:24px">
+        <div>
+          <h4 style="font-size:0.9rem;font-weight:600;color:var(--primary-lt);margin-bottom:10px">mnemonic migrate</h4>
+          <p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:12px">Apply pending schema migrations to your vaults. Always preview with <code>--dry-run</code> first.</p>
+          <div class="code-block">
+            <div class="code-block-header">
+              <span class="code-label">bash</span>
+              <button class="copy-btn" onclick="copyCode(this)">copy</button>
+            </div>
+            <pre><span class="cmt"># Preview changes</span>
+<span class="cmd">mnemonic migrate --dry-run</span>
+
+<span class="cmt"># Apply and auto-commit</span>
+<span class="cmd">mnemonic migrate</span>
+
+<span class="cmt"># List pending migrations</span>
+<span class="cmd">mnemonic migrate --list</span></pre>
+          </div>
+        </div>
+        <div>
+          <h4 style="font-size:0.9rem;font-weight:600;color:var(--cyan-lt);margin-bottom:10px">mnemonic import-claude-memory</h4>
+          <p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:12px">Import Claude Code auto-memory into your vault. Each <code>##</code> heading in <code>~/.claude/projects/&lt;project&gt;/memory/*.md</code> becomes a separate mnemonic note. Duplicate titles are skipped — safe to re-run.</p>
+          <div class="code-block">
+            <div class="code-block-header">
+              <span class="code-label">bash</span>
+              <button class="copy-btn" onclick="copyCode(this)">copy</button>
+            </div>
+            <pre><span class="cmt"># Preview what would be imported</span>
+<span class="cmd">mnemonic import-claude-memory --dry-run</span>
+
+<span class="cmt"># Import from current project's Claude memory</span>
+<span class="cmd">mnemonic import-claude-memory</span>
+
+<span class="cmt"># Specific project path</span>
+<span class="cmd">mnemonic import-claude-memory --cwd=/path/to/project</span></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="agent-snippet" class="agent-snippet fade-up">
       <h3>Add to your AGENT.md or system prompt</h3>
       <p>Drop this snippet into your <code style="font-family:JetBrains Mono,monospace;font-size:0.85em;color:var(--cyan-lt)">AGENT.md</code>, Cursor rules, or Claude system prompt to activate proactive memory behavior.</p>
