@@ -2260,6 +2260,7 @@ server.registerTool(
         .object({
           sourceIds: z.array(z.string()).min(2).describe("Notes to merge into a single consolidated note"),
           targetTitle: z.string().describe("Title for the consolidated note"),
+          content: z.string().optional().describe("Custom body for the consolidated note. When provided, replaces the auto-merged source content. Use this to distil only durable knowledge instead of dumping all source content verbatim."),
           description: z.string().optional().describe("Optional context explaining the consolidation (stored in note)"),
           summary: z.string().optional().describe("Brief summary of merge rationale (for git commit message only)"),
           tags: z.array(z.string()).optional().describe("Tags for the consolidated note (defaults to union of source tags)"),
@@ -2596,7 +2597,7 @@ async function suggestMerges(
 
 async function executeMerge(
   entries: NoteEntry[],
-  mergePlan: { sourceIds: string[]; targetTitle: string; description?: string; summary?: string; tags?: string[] },
+  mergePlan: { sourceIds: string[]; targetTitle: string; content?: string; description?: string; summary?: string; tags?: string[] },
   defaultConsolidationMode: ConsolidationMode,
   project: Awaited<ReturnType<typeof resolveProject>>,
   cwd?: string,
@@ -2604,7 +2605,7 @@ async function executeMerge(
 ): Promise<{ content: Array<{ type: "text"; text: string }>; structuredContent: ConsolidateResult }> {
   const sourceIds = normalizeMergePlanSourceIds(mergePlan.sourceIds);
   const targetTitle = mergePlan.targetTitle.trim();
-  const { description, summary, tags } = mergePlan;
+  const { content: customContent, description, summary, tags } = mergePlan;
 
   if (sourceIds.length < 2) {
     const structuredContent: ConsolidateResult = {
@@ -2663,17 +2664,25 @@ async function executeMerge(
 
   // Build consolidated content
   const sections: string[] = [];
-  if (description) {
-    sections.push(description);
-    sections.push("");
-  }
-  sections.push("## Consolidated from:");
-  for (const entry of sourceEntries) {
-    sections.push(`### ${entry.note.title}`);
-    sections.push(`*Source: \`${entry.note.id}\`*`);
-    sections.push("");
-    sections.push(entry.note.content);
-    sections.push("");
+  if (customContent) {
+    if (description) {
+      sections.push(description);
+      sections.push("");
+    }
+    sections.push(customContent);
+  } else {
+    if (description) {
+      sections.push(description);
+      sections.push("");
+    }
+    sections.push("## Consolidated from:");
+    for (const entry of sourceEntries) {
+      sections.push(`### ${entry.note.title}`);
+      sections.push(`*Source: \`${entry.note.id}\`*`);
+      sections.push("");
+      sections.push(entry.note.content);
+      sections.push("");
+    }
   }
 
   // Combine tags (deduplicated)
@@ -2696,6 +2705,7 @@ async function executeMerge(
     relatedTo: allRelationships,
     createdAt: now,
     updatedAt: now,
+    memoryVersion: 1,
   };
 
   // Write consolidated note
