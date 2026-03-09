@@ -34,6 +34,7 @@ import { classifyTheme, summarizePreview, titleCaseTheme } from "./project-intro
 import { detectProject, resolveProjectIdentity, type ProjectIdentityResolution } from "./project.js";
 import { VaultManager, type Vault } from "./vault.js";
 import { Migrator } from "./migration.js";
+import { parseMemorySections } from "./import.js";
 import type {
   StructuredResponse,
   RememberResult,
@@ -205,47 +206,15 @@ Examples:
 // ── CLI: import-claude-memory ─────────────────────────────────────────────────
 
 if (process.argv[2] === "import-claude-memory") {
+  const homeDir = process.env["HOME"] ?? process.env["USERPROFILE"] ?? "~";
+
   const VAULT_PATH = process.env["VAULT_PATH"]
     ? path.resolve(process.env["VAULT_PATH"])
-    : path.join(process.env["HOME"] ?? "~", "mnemonic-vault");
+    : path.join(homeDir, "mnemonic-vault");
 
   const CLAUDE_HOME = process.env["CLAUDE_HOME"]
     ? path.resolve(process.env["CLAUDE_HOME"])
-    : path.join(process.env["HOME"] ?? "~", ".claude");
-
-  function parseMemorySections(content: string): Array<{ title: string; content: string }> {
-    const lines = content.split("\n");
-    const sections: Array<{ title: string; content: string }> = [];
-    let currentH1 = "";
-    let currentTitle = "";
-    let currentLines: string[] = [];
-
-    const flush = () => {
-      if (currentTitle) {
-        const title = currentH1 ? `${currentH1}: ${currentTitle}` : currentTitle;
-        sections.push({ title, content: currentLines.join("\n").trim() });
-      }
-    };
-
-    for (const line of lines) {
-      if (line.startsWith("# ") && !line.startsWith("## ")) {
-        flush();
-        currentH1 = line.slice(2).trim();
-        currentTitle = "";
-        currentLines = [];
-      } else if (line.startsWith("## ")) {
-        flush();
-        currentTitle = line.slice(3).trim();
-        currentLines = [];
-      } else if (currentTitle) {
-        currentLines.push(line);
-      }
-    }
-
-    flush();
-
-    return sections.filter(s => s.content.length > 0);
-  }
+    : path.join(homeDir, ".claude");
 
   function makeImportNoteId(title: string): string {
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
@@ -293,7 +262,8 @@ Examples:
 
     // Encode the project path the same way Claude Code does:
     // /Users/foo/Projects/bar → -Users-foo-Projects-bar
-    const projectDirName = targetCwd.replace(/\//g, "-");
+    // On Windows both \ and / are replaced with -
+    const projectDirName = targetCwd.replace(/[/\\]/g, "-");
     const memoryDir = path.join(claudeHome, "projects", projectDirName, "memory");
 
     try {
