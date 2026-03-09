@@ -7,27 +7,11 @@ tags:
   - persistence-status
 lifecycle: permanent
 createdAt: '2026-03-09T11:32:57.609Z'
-updatedAt: '2026-03-09T11:32:57.609Z'
+updatedAt: '2026-03-09T11:58:03.794Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
+memoryVersion: 0
 ---
-## Consolidated from:
-### Persistence status reporting implementation plan
-*Source: `persistence-status-reporting-implementation-plan-bd3feace`*
-
-Accepted implementation plan for persistence-status visibility in mutating MCP tools.
-
-Plan:
-
-- Define a shared persistence-status shape that tells callers whether the note file, embedding, git commit, and git push succeeded.
-- Include canonical storage paths so callers can locate the note and embedding without an extra lookup.
-- Return this status from the write/update flows and any other mutating tools where partial success is possible.
-- Add tests covering successful writes and embedding/git partial-success scenarios.
-- Update docs so agents know they can trust structured persistence status instead of re-checking every write manually.
-
-### Persistence status reporting implementation outcome
-*Source: `persistence-status-reporting-implementation-outcome-39087afe`*
-
 Implementation outcome for persistence-status visibility in mutating MCP tools.
 
 What changed:
