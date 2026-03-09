@@ -9,6 +9,7 @@ createdAt: '2026-03-09T19:54:04.937Z'
 updatedAt: '2026-03-09T19:54:04.937Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
+lifecycle: temporary
 memoryVersion: 1
 ---
 ## Goal
