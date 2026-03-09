@@ -61,6 +61,7 @@ import {
   RememberResultSchema,
   RecallResultSchema,
   ListResultSchema,
+  GetResultSchema,
   UpdateResultSchema,
   ForgetResultSchema,
   MoveResultSchema,
@@ -69,6 +70,8 @@ import {
   MemoryGraphResultSchema,
   ProjectSummaryResultSchema,
   SyncResultSchema,
+  ReindexResultSchema,
+  WhereIsResultSchema,
   ConsolidateResultSchema,
   ProjectIdentityResultSchema,
   MigrationListResultSchema,
@@ -440,7 +443,8 @@ function formatAskForWriteScope(project: Awaited<ReturnType<typeof resolveProjec
 
 async function embedMissingNotes(
   storage: Storage,
-  noteIds?: string[]
+  noteIds?: string[],
+  force = false
 ): Promise<{ rebuilt: number; failed: string[] }> {
   const notes = noteIds
     ? (await Promise.all(noteIds.map((id) => storage.readNote(id)))).filter(Boolean) as Note[]
@@ -458,9 +462,11 @@ async function embedMissingNotes(
         return;
       }
 
-      const existing = await storage.readEmbedding(note.id);
-      if (existing?.model === embedModel) {
-        continue;
+      if (!force) {
+        const existing = await storage.readEmbedding(note.id);
+        if (existing?.model === embedModel) {
+          continue;
+        }
       }
 
       try {
@@ -583,7 +589,7 @@ type NoteEntry = {
   vault: Vault;
 };
 
-function storageLabel(vault: Vault): string {
+function storageLabel(vault: Vault): "project-vault" | "main-vault" {
   return vault.isProject ? "project-vault" : "main-vault";
 }
 
@@ -1576,6 +1582,166 @@ server.registerTool(
     };
     
     return { content: [{ type: "text", text: `Forgotten '${id}' (${note.title})` }], structuredContent };
+  }
+);
+
+// ── get ───────────────────────────────────────────────────────────────────────
+server.registerTool(
+  "get",
+  {
+    title: "Get Memory",
+    description:
+      "Fetch one or more notes by exact id. Returns full note content, metadata, and relationships. " +
+      "Pass `cwd` to search the project vault when looking up project notes.",
+    inputSchema: z.object({
+      ids: z.array(z.string()).min(1).describe("One or more memory ids to fetch"),
+      cwd: projectParam,
+    }),
+    outputSchema: GetResultSchema,
+  },
+  async ({ ids, cwd }) => {
+    const found: GetResult["notes"] = [];
+    const notFound: string[] = [];
+
+    for (const id of ids) {
+      const result = await vaultManager.findNote(id, cwd);
+      if (!result) {
+        notFound.push(id);
+        continue;
+      }
+      const { note, vault } = result;
+      found.push({
+        id: note.id,
+        title: note.title,
+        content: note.content,
+        project: note.project,
+        projectName: note.projectName,
+        tags: note.tags,
+        lifecycle: note.lifecycle,
+        relatedTo: note.relatedTo,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt,
+        vault: storageLabel(vault),
+      });
+    }
+
+    const lines: string[] = [];
+    for (const note of found) {
+      lines.push(`## ${note.title} (${note.id})`);
+      lines.push(`project: ${note.projectName ?? note.project ?? "global"} | stored: ${note.vault} | lifecycle: ${note.lifecycle}`);
+      if (note.tags.length > 0) lines.push(`tags: ${note.tags.join(", ")}`);
+      lines.push("");
+      lines.push(note.content);
+      lines.push("");
+    }
+    if (notFound.length > 0) {
+      lines.push(`Not found: ${notFound.join(", ")}`);
+    }
+
+    const structuredContent: GetResult = {
+      action: "got",
+      count: found.length,
+      notes: found,
+      notFound,
+    };
+
+    return { content: [{ type: "text", text: lines.join("\n").trim() }], structuredContent };
+  }
+);
+
+// ── where_is_memory ───────────────────────────────────────────────────────────
+server.registerTool(
+  "where_is_memory",
+  {
+    title: "Where Is Memory",
+    description:
+      "Show a memory's project association and actual storage location (main vault or project vault). " +
+      "Lightweight alternative to `get` when you only need location metadata, not content. " +
+      "Pass `cwd` to include the project vault when searching.",
+    inputSchema: z.object({
+      id: z.string().describe("Memory id to locate"),
+      cwd: projectParam,
+    }),
+    outputSchema: WhereIsResultSchema,
+  },
+  async ({ id, cwd }) => {
+    const found = await vaultManager.findNote(id, cwd);
+    if (!found) {
+      return { content: [{ type: "text", text: `No memory found with id '${id}'` }], isError: true };
+    }
+
+    const { note, vault } = found;
+    const vaultLabel = storageLabel(vault);
+    const projectDisplay = note.projectName && note.project
+      ? `${note.projectName} (${note.project})`
+      : note.projectName ?? note.project ?? "global";
+    const relatedCount = note.relatedTo?.length ?? 0;
+
+    const structuredContent: WhereIsResult = {
+      action: "located",
+      id: note.id,
+      title: note.title,
+      project: note.project,
+      projectName: note.projectName,
+      vault: vaultLabel,
+      updatedAt: note.updatedAt,
+      relatedCount,
+    };
+
+    return {
+      content: [{
+        type: "text",
+        text: `'${note.title}' (${id})\nproject: ${projectDisplay} | stored: ${vaultLabel} | updated: ${note.updatedAt} | related: ${relatedCount}`,
+      }],
+      structuredContent,
+    };
+  }
+);
+
+// ── reindex ───────────────────────────────────────────────────────────────────
+server.registerTool(
+  "reindex",
+  {
+    title: "Reindex",
+    description:
+      "Rebuild embeddings for notes that are missing them or have a stale model. " +
+      "Use `force=true` to rebuild all embeddings regardless of model. " +
+      "Useful on a fresh clone (embeddings are gitignored), after switching embedding models, " +
+      "or when Ollama was unavailable during earlier writes. " +
+      "Always reindexes the main vault. Pass `cwd` to also reindex the project vault.",
+    inputSchema: z.object({
+      cwd: projectParam,
+      force: z.boolean().optional().default(false).describe("Rebuild all embeddings even if current model already has them"),
+    }),
+    outputSchema: ReindexResultSchema,
+  },
+  async ({ cwd, force }) => {
+    const lines: string[] = [];
+    const vaultResults: Array<{ vault: "main" | "project"; rebuilt: number; failed: string[] }> = [];
+
+    // Always reindex main vault
+    const { rebuilt: mainRebuilt, failed: mainFailed } = await embedMissingNotes(vaultManager.main.storage, undefined, force);
+    lines.push(`main vault: rebuilt ${mainRebuilt} embedding(s)${mainFailed.length > 0 ? `, failed: ${mainFailed.join(", ")}` : ""}.`);
+    vaultResults.push({ vault: "main", rebuilt: mainRebuilt, failed: mainFailed });
+
+    // Optionally reindex project vault
+    if (cwd) {
+      const projectVault = await vaultManager.getProjectVaultIfExists(cwd);
+      if (projectVault) {
+        const { rebuilt: projRebuilt, failed: projFailed } = await embedMissingNotes(projectVault.storage, undefined, force);
+        lines.push(`project vault: rebuilt ${projRebuilt} embedding(s)${projFailed.length > 0 ? `, failed: ${projFailed.join(", ")}` : ""}.`);
+        vaultResults.push({ vault: "project", rebuilt: projRebuilt, failed: projFailed });
+      } else {
+        lines.push("project vault: no .mnemonic/ found — skipped.");
+      }
+    }
+
+    const structuredContent: StructuredReindexResult = {
+      action: "reindexed",
+      vaults: vaultResults,
+    };
+
+    return { content: [{ type: "text", text: lines.join("\n") }], structuredContent };
   }
 );
 

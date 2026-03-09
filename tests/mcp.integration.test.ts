@@ -512,6 +512,128 @@ describe("local MCP script", () => {
       await embeddingServer.close();
     }
   }, 20000);
+
+  it("fetches full note content via get by exact id", async () => {
+    const vaultDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-vault-"));
+    tempDirs.push(vaultDir);
+    const embeddingServer = await startFakeEmbeddingServer();
+
+    try {
+      const rememberText = await callLocalMcp(vaultDir, "remember", {
+        title: "Get tool test note",
+        content: "Content only accessible via get.",
+        tags: ["get-test"],
+        scope: "global",
+        summary: "Seed note for get tool test",
+      }, embeddingServer.url);
+
+      const noteId = extractRememberedId(rememberText);
+
+      const response = await callLocalMcpResponse(vaultDir, "get", {
+        ids: [noteId],
+      }, embeddingServer.url);
+
+      expect(response.text).toContain("Get tool test note");
+      expect(response.text).toContain("Content only accessible via get.");
+
+      const structured = response.structuredContent;
+      expect(structured?.["action"]).toBe("got");
+      expect(structured?.["count"]).toBe(1);
+      const notes = structured?.["notes"] as Array<Record<string, unknown>>;
+      expect(notes).toHaveLength(1);
+      expect(notes[0]?.["id"]).toBe(noteId);
+      expect(notes[0]?.["title"]).toBe("Get tool test note");
+      expect(notes[0]?.["content"]).toContain("Content only accessible via get.");
+      expect(notes[0]?.["vault"]).toBe("main-vault");
+      expect(structured?.["notFound"]).toEqual([]);
+    } finally {
+      await embeddingServer.close();
+    }
+  }, 15000);
+
+  it("reports not found ids from get", async () => {
+    const vaultDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-vault-"));
+    tempDirs.push(vaultDir);
+
+    const response = await callLocalMcpResponse(vaultDir, "get", {
+      ids: ["nonexistent-id-abc123"],
+    });
+
+    const structured = response.structuredContent;
+    expect(structured?.["action"]).toBe("got");
+    expect(structured?.["count"]).toBe(0);
+    expect(structured?.["notFound"]).toEqual(["nonexistent-id-abc123"]);
+  }, 15000);
+
+  it("locates a memory via where_is_memory", async () => {
+    const vaultDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-vault-"));
+    tempDirs.push(vaultDir);
+    const embeddingServer = await startFakeEmbeddingServer();
+
+    try {
+      const rememberText = await callLocalMcp(vaultDir, "remember", {
+        title: "Where is memory test",
+        content: "A note to locate.",
+        scope: "global",
+        summary: "Seed note for where_is_memory test",
+      }, embeddingServer.url);
+
+      const noteId = extractRememberedId(rememberText);
+
+      const response = await callLocalMcpResponse(vaultDir, "where_is_memory", {
+        id: noteId,
+      }, embeddingServer.url);
+
+      expect(response.text).toContain("Where is memory test");
+      expect(response.text).toContain("main-vault");
+
+      const structured = response.structuredContent;
+      expect(structured?.["action"]).toBe("located");
+      expect(structured?.["id"]).toBe(noteId);
+      expect(structured?.["title"]).toBe("Where is memory test");
+      expect(structured?.["vault"]).toBe("main-vault");
+      expect(structured?.["relatedCount"]).toBe(0);
+    } finally {
+      await embeddingServer.close();
+    }
+  }, 15000);
+
+  it("reindexes missing embeddings without git operations", async () => {
+    const vaultDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-vault-"));
+    tempDirs.push(vaultDir);
+    const embeddingServer = await startFakeEmbeddingServer();
+
+    try {
+      // Remember with Ollama down — embedding will be skipped
+      const rememberText = await callLocalMcp(vaultDir, "remember", {
+        title: "Reindex test note",
+        content: "This note has no embedding yet.",
+        scope: "global",
+        summary: "Seed note with no embedding",
+      }, { ollamaUrl: "http://127.0.0.1:9" });
+
+      const noteId = extractRememberedId(rememberText);
+      const embeddingPath = path.join(vaultDir, "embeddings", `${noteId}.json`);
+      await expect(stat(embeddingPath)).rejects.toThrow(); // no embedding written
+
+      // Reindex with Ollama available
+      const response = await callLocalMcpResponse(vaultDir, "reindex", {}, embeddingServer.url);
+
+      expect(response.text).toContain("main vault: rebuilt 1 embedding(s)");
+
+      const structured = response.structuredContent;
+      expect(structured?.["action"]).toBe("reindexed");
+      const vaults = structured?.["vaults"] as Array<Record<string, unknown>>;
+      expect(vaults).toHaveLength(1);
+      expect(vaults[0]?.["vault"]).toBe("main");
+      expect(vaults[0]?.["rebuilt"]).toBe(1);
+      expect(vaults[0]?.["failed"]).toEqual([]);
+
+      await expect(stat(embeddingPath)).resolves.toBeDefined();
+    } finally {
+      await embeddingServer.close();
+    }
+  }, 15000);
 });
 
 async function callLocalMcp(
