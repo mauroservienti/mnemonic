@@ -5,8 +5,9 @@ tags:
   - mcp-compliance
   - outputSchema
   - wip
+lifecycle: temporary
 createdAt: '2026-03-09T18:15:14.121Z'
-updatedAt: '2026-03-09T18:15:14.121Z'
+updatedAt: '2026-03-09T18:23:26.501Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
 memoryVersion: 1
