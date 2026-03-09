@@ -194,7 +194,7 @@ export class Storage {
     if (note.relatedTo && note.relatedTo.length > 0) {
       frontmatter["relatedTo"] = note.relatedTo;
     }
-    if (note.memoryVersion !== undefined) {
+    if (note.memoryVersion !== undefined && note.memoryVersion > 0) {
       frontmatter["memoryVersion"] = note.memoryVersion;
     }
     return matter.stringify(note.content, frontmatter);

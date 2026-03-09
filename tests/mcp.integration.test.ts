@@ -391,6 +391,65 @@ describe("local MCP script", () => {
     }
   }, 15000);
 
+  it("uses custom content body when mergePlan.content is provided", async () => {
+    const vaultDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-vault-"));
+    const repoDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-project-"));
+    tempDirs.push(vaultDir, repoDir);
+
+    await execFileAsync("git", ["init"], { cwd: repoDir });
+
+    const embeddingServer = await startFakeEmbeddingServer();
+
+    try {
+      const planRemember = await callLocalMcp(vaultDir, "remember", {
+        title: "Implementation plan",
+        content: "Plan: do X, Y, Z.",
+        tags: ["plan"],
+        lifecycle: "temporary",
+        summary: "Create temporary plan note",
+        cwd: repoDir,
+        scope: "project",
+      }, embeddingServer.url);
+      const outcomeRemember = await callLocalMcp(vaultDir, "remember", {
+        title: "Implementation outcome",
+        content: "Outcome: X, Y, Z done. Changed A and B.",
+        tags: ["outcome"],
+        lifecycle: "temporary",
+        summary: "Create temporary outcome note",
+        cwd: repoDir,
+        scope: "project",
+      }, embeddingServer.url);
+
+      const planId = extractRememberedId(planRemember);
+      const outcomeId = extractRememberedId(outcomeRemember);
+
+      const distilledContent = "Implemented persistence-status reporting. Changed A and B. Pattern: return structured status from all mutating tools.";
+      const consolidateText = await callLocalMcp(vaultDir, "consolidate", {
+        cwd: repoDir,
+        strategy: "execute-merge",
+        mergePlan: {
+          sourceIds: [planId, outcomeId],
+          targetTitle: "Persistence status reporting",
+          content: distilledContent,
+        },
+      }, embeddingServer.url);
+
+      expect(consolidateText).toContain("Mode: delete");
+
+      const consolidatedIdMatch = consolidateText.match(/Consolidated \d+ notes into '([^']+)'/);
+      expect(consolidatedIdMatch).toBeTruthy();
+      const consolidatedId = consolidatedIdMatch![1]!;
+      const consolidatedPath = path.join(repoDir, ".mnemonic", "notes", `${consolidatedId}.md`);
+      const consolidatedContents = await readFile(consolidatedPath, "utf-8");
+
+      expect(consolidatedContents).toContain(distilledContent);
+      expect(consolidatedContents).not.toContain("## Consolidated from:");
+      expect(consolidatedContents).not.toContain("Plan: do X, Y, Z.");
+    } finally {
+      await embeddingServer.close();
+    }
+  }, 15000);
+
   it("reports sync status cleanly when git syncing is disabled", async () => {
     const vaultDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-vault-"));
     const repoDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-project-"));
