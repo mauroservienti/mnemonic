@@ -466,6 +466,22 @@ async function embedMissingNotes(
   return { rebuilt, failed };
 }
 
+async function backfillEmbeddingsAfterSync(
+  storage: Storage,
+  label: string,
+  lines: string[],
+): Promise<{ embedded: number; failed: string[] }> {
+  const { rebuilt, failed } = await embedMissingNotes(storage);
+  if (rebuilt > 0 || failed.length > 0) {
+    lines.push(
+      `${label}: embedded ${rebuilt} note(s) (including any missing local embeddings).` +
+      `${failed.length > 0 ? ` Failed: ${failed.join(", ")}` : ""}`,
+    );
+  }
+
+  return { embedded: rebuilt, failed };
+}
+
 async function removeStaleEmbeddings(storage: Storage, noteIds: string[]): Promise<void> {
   for (const id of noteIds) {
     try { await fs.unlink(storage.embeddingPath(id)); } catch { /* already gone */ }
@@ -1783,11 +1799,10 @@ server.registerTool(
     lines.push(...formatSyncResult(mainResult, "main vault"));
     let mainEmbedded = 0;
     let mainFailed: string[] = [];
-    if (mainResult.pulledNoteIds.length > 0) {
-      const { rebuilt, failed } = await embedMissingNotes(vaultManager.main.storage, mainResult.pulledNoteIds);
-      mainEmbedded = rebuilt;
-      mainFailed = failed;
-      lines.push(`main vault: embedded ${rebuilt} note(s).${failed.length > 0 ? ` Failed: ${failed.join(", ")}` : ""}`);
+    if (mainResult.hasRemote) {
+      const result = await backfillEmbeddingsAfterSync(vaultManager.main.storage, "main vault", lines);
+      mainEmbedded = result.embedded;
+      mainFailed = result.failed;
     }
     if (mainResult.deletedNoteIds.length > 0) {
       await removeStaleEmbeddings(vaultManager.main.storage, mainResult.deletedNoteIds);
@@ -1810,11 +1825,10 @@ server.registerTool(
         lines.push(...formatSyncResult(projectResult, "project vault"));
         let projEmbedded = 0;
         let projFailed: string[] = [];
-        if (projectResult.pulledNoteIds.length > 0) {
-          const { rebuilt, failed } = await embedMissingNotes(projectVault.storage, projectResult.pulledNoteIds);
-          projEmbedded = rebuilt;
-          projFailed = failed;
-          lines.push(`project vault: embedded ${rebuilt} note(s).${failed.length > 0 ? ` Failed: ${failed.join(", ")}` : ""}`);
+        if (projectResult.hasRemote) {
+          const result = await backfillEmbeddingsAfterSync(projectVault.storage, "project vault", lines);
+          projEmbedded = result.embedded;
+          projFailed = result.failed;
         }
         if (projectResult.deletedNoteIds.length > 0) {
           await removeStaleEmbeddings(projectVault.storage, projectResult.deletedNoteIds);

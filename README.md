@@ -385,7 +385,7 @@ git clone git@github.com:you/mnemonic-vault.git ~/mnemonic-vault
 ```bash
 # Already in the project repo — just clone the project as normal.
 # The .mnemonic/ directory comes along with it.
-# Ask Claude to run `reindex` with the project cwd to build local embeddings.
+# Then ask Claude to run the `sync` tool with the project cwd — it will pull/push normally and also backfill missing local embeddings for existing `.mnemonic/` notes.
 ```
 
 After the first sync, just call `sync` (with `cwd` for project vaults) whenever you switch machines. It handles pull, push, and embedding in one shot — no separate `reindex` needed.
