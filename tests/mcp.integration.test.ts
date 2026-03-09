@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { mkdtemp, readFile, rm, stat } from "fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
 import { spawn } from "child_process";
@@ -350,14 +350,65 @@ describe("local MCP script", () => {
     expect(syncText).toContain("main vault: no remote configured");
     expect(syncText).toContain("project vault: no .mnemonic/ found — skipped.");
   }, 15000);
+
+  it("backfills missing project embeddings during sync on a fresh clone", async () => {
+    const vaultDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-vault-"));
+    const remoteDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-remote-"));
+    const sourceDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-source-"));
+    const cloneDir = await mkdtemp(path.join(os.tmpdir(), "mnemonic-mcp-clone-"));
+    tempDirs.push(vaultDir, remoteDir, sourceDir, cloneDir);
+
+    await execFileAsync("git", ["init", "--bare", remoteDir]);
+    await execFileAsync("git", ["init", "-b", "main"], { cwd: sourceDir });
+    await execFileAsync("git", ["remote", "add", "origin", remoteDir], { cwd: sourceDir });
+
+    await mkdir(path.join(sourceDir, ".mnemonic", "notes"), { recursive: true });
+    await writeFile(path.join(sourceDir, ".mnemonic", ".gitignore"), "embeddings/\n", "utf-8");
+    await writeFile(
+      path.join(sourceDir, ".mnemonic", "notes", "fresh-clone-note.md"),
+      `---\ntitle: Fresh clone note\ntags: []\nlifecycle: permanent\ncreatedAt: 2026-03-09T00:00:00.000Z\nupdatedAt: 2026-03-09T00:00:00.000Z\nmemoryVersion: 1\n---\n\nThis note should be embedded during sync on a fresh machine.`,
+      "utf-8",
+    );
+
+    await execFileAsync("git", ["add", "."], { cwd: sourceDir });
+    await execFileAsync(
+      "git",
+      ["-c", "user.name=Test User", "-c", "user.email=test@example.com", "commit", "-m", "seed project mnemonic notes"],
+      { cwd: sourceDir },
+    );
+    await execFileAsync("git", ["push", "-u", "origin", "main"], { cwd: sourceDir });
+
+    await execFileAsync("git", ["clone", "--branch", "main", remoteDir, cloneDir]);
+
+    const embeddingServer = await startFakeEmbeddingServer();
+
+    try {
+      const beforeEmbedding = path.join(cloneDir, ".mnemonic", "embeddings", "fresh-clone-note.json");
+      await expect(stat(beforeEmbedding)).rejects.toThrow();
+
+      const syncText = await callLocalMcp(
+        vaultDir,
+        "sync",
+        { cwd: cloneDir },
+        { ollamaUrl: embeddingServer.url, disableGit: false },
+      );
+
+      expect(syncText).toContain("project vault: ↓ no new notes from remote.");
+      expect(syncText).toContain("project vault: embedded 1 note(s) (including any missing local embeddings).");
+      await expect(stat(beforeEmbedding)).resolves.toBeDefined();
+    } finally {
+      await embeddingServer.close();
+    }
+  }, 20000);
 });
 
 async function callLocalMcp(
   vaultDir: string,
   toolName: string,
   arguments_: Record<string, unknown>,
-   ollamaUrl?: string,
+  options?: string | { ollamaUrl?: string; disableGit?: boolean },
 ): Promise<string> {
+  const resolvedOptions = typeof options === "string" ? { ollamaUrl: options } : options;
   const messages = [
     {
       jsonrpc: "2.0",
@@ -385,9 +436,9 @@ async function callLocalMcp(
       cwd: repoRoot,
       env: {
         ...process.env,
-        DISABLE_GIT: "true",
+        DISABLE_GIT: resolvedOptions?.disableGit === false ? "false" : "true",
         VAULT_PATH: vaultDir,
-        ...(ollamaUrl ? { OLLAMA_URL: ollamaUrl } : {}),
+        ...(resolvedOptions?.ollamaUrl ? { OLLAMA_URL: resolvedOptions.ollamaUrl } : {}),
       },
       stdio: ["pipe", "pipe", "pipe"],
     });
