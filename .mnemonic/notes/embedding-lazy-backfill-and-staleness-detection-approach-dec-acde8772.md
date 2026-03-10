@@ -8,9 +8,12 @@ tags:
   - backfill
 lifecycle: permanent
 createdAt: '2026-03-10T19:31:51.002Z'
-updatedAt: '2026-03-10T19:31:51.002Z'
+updatedAt: '2026-03-10T19:32:20.342Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
+relatedTo:
+  - id: implementation-plan-recall-lazy-backfill-and-staleness-detec-307b2512
+    type: explains
 memoryVersion: 1
 ---
 ## Decision
