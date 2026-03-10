@@ -733,6 +733,7 @@ function buildPersistenceStatus(args: {
       commitBody: args.commitBody,
       commitReason: args.commit.reason,
       pushReason: args.push.reason,
+      pushError: args.push.error,
     },
     durability: resolveDurability(args.commit, args.push),
   };
