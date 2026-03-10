@@ -8,9 +8,12 @@ tags:
   - backfill
 lifecycle: temporary
 createdAt: '2026-03-10T19:32:13.115Z'
-updatedAt: '2026-03-10T19:32:13.115Z'
+updatedAt: '2026-03-10T19:32:20.342Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
+relatedTo:
+  - id: embedding-lazy-backfill-and-staleness-detection-approach-dec-acde8772
+    type: explains
 memoryVersion: 1
 ---
 ## Goal
