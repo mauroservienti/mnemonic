@@ -91,16 +91,7 @@ When calling `update`:
   - The setup snippets must stay in sync with README.md
   - The hero terminal shows a real `recall` result — update if the note it references changes significantly
 
-**Troubleshooting:** Complex JSON payloads may fail via stdio due to shell escaping. Write to temp file first:
-```bash
-cat > /tmp/request.json << 'JSON'
-{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{...}}
-JSON
-(
-  echo '{"jsonrpc":"2.0","id":0,"method":"initialize",...}'
-  cat /tmp/request.json
-) | ./scripts/mcp-local.sh
-```
+**Troubleshooting:** If a tool call is silently dropped (only the initialize response arrives, exit 0), recall note `mcp-stdio-protocol-each-json-rpc-message-must-be-one-line-7a4c9438` for the correct shell invocation pattern.
 
 ## Git commit message protocol
 
