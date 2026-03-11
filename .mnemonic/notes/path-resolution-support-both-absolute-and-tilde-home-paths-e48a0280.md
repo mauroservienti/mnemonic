@@ -7,7 +7,7 @@ tags:
   - configuration
 lifecycle: permanent
 createdAt: '2026-03-11T10:30:20.416Z'
-updatedAt: '2026-03-11T10:30:20.416Z'
+updatedAt: '2026-03-11T10:30:56.887Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
 memoryVersion: 1
@@ -28,11 +28,17 @@ Using `path.resolve("~/mnemonic-vault")` does **not** expand `~`; Node treats it
   - MCP startup `VAULT_PATH`
   - `migrate` command `VAULT_PATH`
   - `import-claude-memory` `VAULT_PATH` and `CLAUDE_HOME`
+  - `import-claude-memory` CLI options `--cwd=` and `--claude-home=`
 - Added `tests/paths.test.ts` to lock behavior for:
   - tilde expansion
   - absolute path pass-through
   - USERPROFILE fallback
   - sane defaults when env is missing
+
+## Audit findings
+
+- Remaining `path.resolve(...)` calls in `config.ts`, `vault.ts`, and `storage.ts` operate on already-resolved/internal paths and are safe.
+- Risk pattern to avoid: directly calling `path.resolve` on raw user/env path inputs.
 
 ## Rule going forward
 
