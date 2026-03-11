@@ -9,9 +9,12 @@ tags:
   - design
 lifecycle: permanent
 createdAt: '2026-03-11T11:07:07.938Z'
-updatedAt: '2026-03-11T11:07:07.938Z'
+updatedAt: '2026-03-11T11:07:16.639Z'
 project: https-github-com-danielmarbach-mnemonic
 projectName: mnemonic
+relatedTo:
+  - id: mnemonic-consolidate-tool-design-b9cbac6a
+    type: explains
 memoryVersion: 1
 ---
 # execute-merge scope bug: projectNotes filter excludes cross-scope sources
